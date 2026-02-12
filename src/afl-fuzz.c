@@ -3154,6 +3154,11 @@ int main(int argc, char **argv_orig, char **envp) {
 
     }
 
+    // Kill the forkserver that might have been started by
+    // afl_fsrv_get_mapsize() earlier, so we don't leak an orphaned forkserver
+    // process and its pipe fds.
+    afl_fsrv_kill(&afl->fsrv);
+
     afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                    afl->afl_env.afl_debug_child);
 
