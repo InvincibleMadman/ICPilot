@@ -73,7 +73,7 @@ typedef struct {
   u8 *name;
   u32 size;
   u8  sha1[SHA1_SIZE];
-  u8  is_crash;
+  // u8  is_crash;
 
 } cmin_file_t;
 
@@ -1049,8 +1049,7 @@ static void exec_worker(worker_data_t *data, u32 *shared_cmin_idx) {
   u8 *last_exec_dir = NULL;
   int last_exec_dirfd = -1;
 
-  u32 *tuples = NULL;
-  if (!crashes_only) { tuples = ck_alloc(map_size * sizeof(u32)); }
+  u32 *tuples = ck_alloc(map_size * sizeof(u32));
 
   // Reuse buffer for queue message construction
   // [file_idx (4)] [tuple_count (4)] [tuples...]
@@ -1078,18 +1077,22 @@ static void exec_worker(worker_data_t *data, u32 *shared_cmin_idx) {
 
     if (ret == FSRV_RUN_CRASH) {
 
-      files[i]->is_crash = 1;
-      if (crashes_only) continue;
-      if (!allow_any) continue;
+      // files[i]->is_crash = 1;
+      if (!crashes_only && !allow_any) continue;
 
     } else if (ret == FSRV_RUN_TMOUT) {
 
-      if (crashes_only) continue;
       if (!allow_any) continue;
 
-    }
+    } else if (ret != FSRV_RUN_OK) {
 
-    if (crashes_only) continue;
+      continue;
+
+    } else {
+
+      if (crashes_only) continue;
+
+    }
 
     u8 *trace = fsrv->trace_bits;
     u32 t_len = collect_coverage_counts(trace, map_size, tuples);
@@ -1325,6 +1328,7 @@ static void cmin_run_workers(void) {
       mmap(NULL, update_workers * effective_map_size * sizeof(u32),
            PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
   if (global_best_maps == MAP_FAILED) PFATAL("mmap global_best_maps failed");
+
   for (u32 i = 0; i < update_workers * effective_map_size; i++)
     global_best_maps[i] = cmin_sentinel_idx;
 
@@ -1708,6 +1712,7 @@ static void execute_set_cover(u32 *final_best, u32 *tuple_counts,
 
 }
 
+/*
 static void write_crash_files(void) {
 
   u32 count = 0;
@@ -1735,68 +1740,68 @@ static void write_crash_files(void) {
 
 }
 
+*/
+
 static void cmin_process_results(void) {
 
   // Merge results (already done above in collection loop)
-  if (!crashes_only) {
+  // if (!crashes_only) {
 
-    OKF("Merging traces and computing candidates...");
+  OKF("Merging traces and computing candidates...");
 
-    // Step 1: Merge global best maps and counts
-    u32 *final_best = ck_alloc(effective_map_size * sizeof(u32));
-    u32 *tuple_counts = ck_alloc(effective_map_size * sizeof(u32));
-    for (u32 i = 0; i < effective_map_size; i++) {
+  // Step 1: Merge global best maps and counts
+  u32 *final_best = ck_alloc(effective_map_size * sizeof(u32));
+  u32 *tuple_counts = ck_alloc(effective_map_size * sizeof(u32));
+  for (u32 i = 0; i < effective_map_size; i++) {
 
-      final_best[i] = cmin_sentinel_idx;
-      tuple_counts[i] = 0;
-
-    }
-
-    merge_results(final_best, tuple_counts);
-
-    // Step 2: Identify candidates (files that are best for at least one tuple)
-    u8 *is_candidate = ck_alloc(items);  // bool
-    u32 candidates_cnt = 0;
-    u32 total_tuples = 0;
-
-    total_tuples =
-        identify_candidates(final_best, is_candidate, &candidates_cnt);
-
-    OKF("Found %u unique tuples across %u files. Candidates: %u", total_tuples,
-        items, candidates_cnt);
-
-    // Step 3: Load traces for candidates from temporary files
-    trace_t *candidate_traces = ck_alloc(items * sizeof(trace_t));
-    load_traces(is_candidate, candidate_traces);
-
-    // Step 4: Rarest First Set Cover
-    OKF("Performing Rarest First Set Cover...");
-    execute_set_cover(final_best, tuple_counts, candidate_traces, total_tuples);
-
-    ck_free(tuple_counts);
-    if (global_counts_maps)
-      munmap(global_counts_maps,
-             update_workers * effective_map_size * sizeof(u32));
-
-    for (u32 i = 0; i < items; i++) {
-
-      if (candidate_traces[i].tuples) ck_free(candidate_traces[i].tuples);
-
-    }
-
-    ck_free(candidate_traces);
-    ck_free(final_best);
-    ck_free(is_candidate);
-
-    if (global_best_maps)
-      munmap(global_best_maps,
-             update_workers * effective_map_size * sizeof(u32));
-
-  } else {
-
-    write_crash_files();
+    final_best[i] = cmin_sentinel_idx;
+    tuple_counts[i] = 0;
 
   }
+
+  merge_results(final_best, tuple_counts);
+
+  // Step 2: Identify candidates (files that are best for at least one tuple)
+  u8 *is_candidate = ck_alloc(items);  // bool
+  u32 candidates_cnt = 0;
+  u32 total_tuples = 0;
+
+  total_tuples = identify_candidates(final_best, is_candidate, &candidates_cnt);
+
+  OKF("Found %u unique tuples across %u files. Candidates: %u", total_tuples,
+      items, candidates_cnt);
+
+  // Step 3: Load traces for candidates from temporary files
+  trace_t *candidate_traces = ck_alloc(items * sizeof(trace_t));
+  load_traces(is_candidate, candidate_traces);
+
+  // Step 4: Rarest First Set Cover
+  OKF("Performing Rarest First Set Cover...");
+  execute_set_cover(final_best, tuple_counts, candidate_traces, total_tuples);
+
+  ck_free(tuple_counts);
+  if (global_counts_maps)
+    munmap(global_counts_maps,
+           update_workers * effective_map_size * sizeof(u32));
+
+  for (u32 i = 0; i < items; i++) {
+
+    if (candidate_traces[i].tuples) ck_free(candidate_traces[i].tuples);
+
+  }
+
+  ck_free(candidate_traces);
+  ck_free(final_best);
+  ck_free(is_candidate);
+
+  if (global_best_maps)
+    munmap(global_best_maps, update_workers * effective_map_size * sizeof(u32));
+
+  //} else {
+
+  //  write_crash_files();
+
+  //}
 
 }
 
@@ -1818,7 +1823,12 @@ static void test_target_binary(void) {
 
   if (ret == FSRV_RUN_ERROR)
     FATAL("Unable to open or read input file '%s/%s'", f->dir, f->name);
+  else if (ret == FSRV_RUN_NOINST)
+    FATAL("No instrumentation detected.");
+  else if (ret == FSRV_RUN_NOBITS)
+    FATAL("No instrumentation was gathered.");
 
+  /*
   if (ret == FSRV_RUN_CRASH) {
 
     if (!crashes_only && !allow_any)
@@ -1838,6 +1848,8 @@ static void test_target_binary(void) {
             f->dir, f->name);
 
   }
+
+  */
 
   u8  *trace = fsrv.trace_bits;
   u32 *tuples = ck_alloc(map_size * sizeof(u32));
@@ -2310,12 +2322,15 @@ int main(int argc, char **argv) {
       case 'O':
         frida_mode = 1;
         break;
+
       case 'Q':
         qemu_mode = 1;
         break;
+
       case 'U':
         unicorn_mode = 1;
         break;
+
       case 'X':
         nyx_mode = 1;
         break;
@@ -2323,9 +2338,11 @@ int main(int argc, char **argv) {
       case 'A':
         allow_any = 1;
         break;
+
       case 'C':
         crashes_only = 1;
         break;
+
       case 'e':
         edges_only = 1;
         break;
