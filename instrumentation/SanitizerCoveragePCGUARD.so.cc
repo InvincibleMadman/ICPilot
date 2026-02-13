@@ -403,9 +403,9 @@ Value *ModuleSanitizerCoverageAFL::createGuardPointer(IRBuilder<> &IRB,
 void ModuleSanitizerCoverageAFL::setNoInstrumentMetadata(Value *V) {
 
   // IRBuilder may constant-fold Create* calls and return a Constant instead of
-  // an Instruction.  Constants never appear in the basic-block instruction list,
-  // so they will not be visited during the instrumentation loop — skipping them
-  // here is safe.
+  // an Instruction.  Constants never appear in the basic-block instruction
+  // list, so they will not be visited during the instrumentation loop —
+  // skipping them here is safe.
   if (auto *I = dyn_cast<Instruction>(V)) {
 
     MDNode *Tag = MDNode::get(I->getContext(), {});

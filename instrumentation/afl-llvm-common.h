@@ -75,11 +75,11 @@ IS_EXTERN int be_quiet;
 
 }
 
-#define release_assert(cond, msg) \
-  do {                            \
-    if (!(cond)) {                \
-      release_assert_fail(msg);   \
-    }                             \
+#define release_assert(cond, msg)              \
+  do {                                         \
+                                               \
+    if (!(cond)) { release_assert_fail(msg); } \
+                                               \
   } while (0)
 
 #endif
