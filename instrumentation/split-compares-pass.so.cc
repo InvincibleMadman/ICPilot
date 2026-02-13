@@ -618,7 +618,10 @@ bool SplitComparesTransform::splitCompare(CmpInst *cmp_inst, Module &M,
   s_op1 = IRB.CreateBinOp(Instruction::LShr, op1,
                           ConstantInt::get(OldIntType, bitw / 2));
   op1_high = IRB.CreateTruncOrBitCast(s_op1, NewIntType);
-  icmp_high = cast<CmpInst>(IRB.CreateICmp(pred, op0_high, op1_high));
+  icmp_high = dyn_cast<CmpInst>(IRB.CreateICmp(pred, op0_high, op1_high));
+  release_assert(icmp_high,
+                 "CreateICmp returned a non-Instruction. "
+                 "Support for this case must be added.");
 
   PHINode *PN = nullptr;
 
@@ -639,7 +642,10 @@ bool SplitComparesTransform::splitCompare(CmpInst *cmp_inst, Module &M,
 
       op0_low = Builder.CreateTrunc(op0, NewIntType);
       op1_low = Builder.CreateTrunc(op1, NewIntType);
-      icmp_low = cast<CmpInst>(Builder.CreateICmp(pred, op0_low, op1_low));
+      icmp_low = dyn_cast<CmpInst>(Builder.CreateICmp(pred, op0_low, op1_low));
+      release_assert(icmp_low,
+                     "CreateICmp returned a non-Instruction. "
+                     "Support for this case must be added.");
 
       BranchInst::Create(end_bb, cmp_low_bb);
 

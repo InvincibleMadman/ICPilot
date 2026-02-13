@@ -68,5 +68,19 @@ IS_EXTERN int be_quiet;
 
 #undef IS_EXTERN
 
+[[noreturn]] inline void release_assert_fail(const char *msg) {
+
+  llvm::errs() << "AFL++ ERROR: " << msg << "\n";
+  abort();
+
+}
+
+#define release_assert(cond, msg) \
+  do {                            \
+    if (!(cond)) {                \
+      release_assert_fail(msg);   \
+    }                             \
+  } while (0)
+
 #endif
 
