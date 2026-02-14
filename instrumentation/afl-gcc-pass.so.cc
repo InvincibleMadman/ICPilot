@@ -201,7 +201,7 @@ struct afl_pass : afl_base_pass {
     basic_block bb;
     FOR_EACH_BB_FN(bb, fn) {
 
-      if (!instrument_block_p(bb)) continue;
+      if (!instrument_block_p(fn, bb)) continue;
 
       if (returns_twice_handled.contains(bb)) continue;
 
@@ -467,9 +467,29 @@ struct afl_pass : afl_base_pass {
   /* Decide whether to instrument block BB.  Skip it due to the random
      distribution, or if it's the single successor of all its
      predecessors.  */
-  inline bool instrument_block_p(basic_block bb) {
+  inline bool instrument_block_p(function *fn, basic_block bb) {
 
     if (AFL_R(100) >= (long int)inst_ratio) return false;
+
+/* GCC versions < 15 can ICE in purge_dead_edges during RTL CFG cleanup when
+   side-effecting instrumentation is injected into EH-only dispatcher/resx
+   blocks produced by coroutine lowering. Restrict this workaround to
+   coroutine-related functions. */
+#if GCC_VERSION < 15000
+    if (fn->coroutine_component) {
+
+      for (gimple_stmt_iterator gsi = gsi_start_bb(bb); !gsi_end_p(gsi);
+           gsi_next(&gsi)) {
+
+        gimple           stmt = gsi_stmt(gsi);
+        enum gimple_code code = gimple_code(stmt);
+        if (code == GIMPLE_EH_DISPATCH || code == GIMPLE_RESX) return false;
+
+      }
+
+    }
+
+#endif
 
     edge          e;
     edge_iterator ei;
