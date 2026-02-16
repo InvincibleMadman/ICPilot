@@ -169,8 +169,8 @@ class ModuleSanitizerCoverageAFL
                                 uint32_t cnt_cov, uint32_t skip_blocks,
                                 uint32_t               special,
                                 ArrayRef<BasicBlock *> AllBlocks);
-  void   updateCoverageForSelect(IRBuilder<> &IRB, Value *result,
-                                 Value *MapPtr, uint32_t &vector_cnt);
+  void   updateCoverageForSelect(IRBuilder<> &IRB, Value *result, Value *MapPtr,
+                                 uint32_t &vector_cnt);
   void   setNoInstrumentMetadata(Value *V);
 
   std::string     getSectionName(const std::string &Section) const;
@@ -404,7 +404,7 @@ void ModuleSanitizerCoverageAFL::setNoInstrumentMetadata(Value *V) {
 }
 
 void ModuleSanitizerCoverageAFL::updateCoverageBitmap(IRBuilder<> &IRB,
-                                                      Value    *CoverageIndex,
+                                                      Value *CoverageIndex,
                                                       Value *MapPtr) {
 
   Value *MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, CoverageIndex);
