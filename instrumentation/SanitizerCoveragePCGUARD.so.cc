@@ -162,7 +162,7 @@ class ModuleSanitizerCoverageAFL
   void   setupIJONSymbols(Module &M, bool uses_ijon_state);
   Value *createGuardPointer(IRBuilder<> &IRB, uint32_t index);
   void   updateCoverageBitmap(IRBuilder<> &IRB, Value *CoverageIndex,
-                              LoadInst *MapPtr);
+                              Value *MapPtr);
   void   printDebugInfo(Instruction &IN);
   Value *instrumentVectorSelect(IRBuilder<> &IRB, Value *condition,
                                 FixedVectorType *tt, uint32_t &local_selects,
@@ -170,21 +170,8 @@ class ModuleSanitizerCoverageAFL
                                 uint32_t               special,
                                 ArrayRef<BasicBlock *> AllBlocks);
   void   updateCoverageForSelect(IRBuilder<> &IRB, Value *result,
-                                 LoadInst *MapPtr, uint32_t &vector_cnt);
+                                 Value *MapPtr, uint32_t &vector_cnt);
   void   setNoInstrumentMetadata(Value *V);
-
-  void SetNoSanitizeMetadata(Instruction *I) {
-
-#if LLVM_MAJOR >= 19
-    I->setNoSanitizeMetadata();
-#elif LLVM_MAJOR >= 16
-    I->setMetadata(LLVMContext::MD_nosanitize, MDNode::get(*C, std::nullopt));
-#else
-    I->setMetadata(I->getModule()->getMDKindID("nosanitize"),
-                   MDNode::get(*C, None));
-#endif
-
-  }
 
   std::string     getSectionName(const std::string &Section) const;
   std::string     getSectionStart(const std::string &Section) const;
@@ -209,6 +196,7 @@ class ModuleSanitizerCoverageAFL
   GlobalVariable *AFLMapPtr = NULL;
   GlobalVariable *AFLCovMapSize = NULL;
   GlobalVariable *AFLIJONState = NULL;
+  Value          *FuncMapPtr = NULL;
   ConstantInt    *One = NULL;
   ConstantInt    *Zero = NULL;
   bool            deny_exec = false;
@@ -417,7 +405,7 @@ void ModuleSanitizerCoverageAFL::setNoInstrumentMetadata(Value *V) {
 
 void ModuleSanitizerCoverageAFL::updateCoverageBitmap(IRBuilder<> &IRB,
                                                       Value    *CoverageIndex,
-                                                      LoadInst *MapPtr) {
+                                                      Value *MapPtr) {
 
   Value *MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, CoverageIndex);
 
@@ -431,21 +419,18 @@ void ModuleSanitizerCoverageAFL::updateCoverageBitmap(IRBuilder<> &IRB,
   } else {
 
     LoadInst *Counter = IRB.CreateLoad(IRB.getInt8Ty(), MapPtrIdx);
-    SetNoSanitizeMetadata(Counter);
+    setNoSanitizeMetadata(Counter);
 
     Value *Incr = IRB.CreateAdd(Counter, One);
 
     if (skip_nozero == NULL) {
 
-      auto cf = IRB.CreateICmpEQ(Incr, Zero);
-      setNoInstrumentMetadata(cf);
-      auto carry = IRB.CreateZExt(cf, Int8Ty);
-      Incr = IRB.CreateAdd(Incr, carry);
+      Incr = IRB.CreateBinaryIntrinsic(Intrinsic::umax, Incr, One);
 
     }
 
     StoreInst *StoreCtx = IRB.CreateStore(Incr, MapPtrIdx);
-    SetNoSanitizeMetadata(StoreCtx);
+    setNoSanitizeMetadata(StoreCtx);
 
   }
 
@@ -511,7 +496,7 @@ Value *ModuleSanitizerCoverageAFL::instrumentVectorSelect(
 
 void ModuleSanitizerCoverageAFL::updateCoverageForSelect(IRBuilder<> &IRB,
                                                          Value       *result,
-                                                         LoadInst    *MapPtr,
+                                                         Value       *MapPtr,
                                                          uint32_t &vector_cnt) {
 
   uint32_t vector_cur = 0;
@@ -523,7 +508,7 @@ void ModuleSanitizerCoverageAFL::updateCoverageForSelect(IRBuilder<> &IRB,
     if (!vector_cnt) {
 
       LoadInst *CurLoc = IRB.CreateLoad(IRB.getInt32Ty(), result);
-      SetNoSanitizeMetadata(CurLoc);
+      setNoSanitizeMetadata(CurLoc);
       MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, CurLoc);
 
     } else {
@@ -531,7 +516,7 @@ void ModuleSanitizerCoverageAFL::updateCoverageForSelect(IRBuilder<> &IRB,
       auto element = IRB.CreateExtractElement(result, vector_cur++);
       auto elementptr = IRB.CreateIntToPtr(element, Int32PtrTy);
       auto elementld = IRB.CreateLoad(IRB.getInt32Ty(), elementptr);
-      SetNoSanitizeMetadata(elementld);
+      setNoSanitizeMetadata(elementld);
       MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, elementld);
 
     }
@@ -546,21 +531,18 @@ void ModuleSanitizerCoverageAFL::updateCoverageForSelect(IRBuilder<> &IRB,
     } else {
 
       LoadInst *Counter = IRB.CreateLoad(IRB.getInt8Ty(), MapPtrIdx);
-      SetNoSanitizeMetadata(Counter);
+      setNoSanitizeMetadata(Counter);
 
       Value *Incr = IRB.CreateAdd(Counter, One);
 
       if (skip_nozero == NULL) {
 
-        auto cf = IRB.CreateICmpEQ(Incr, Zero);
-        setNoInstrumentMetadata(cf);
-        auto carry = IRB.CreateZExt(cf, Int8Ty);
-        Incr = IRB.CreateAdd(Incr, carry);
+        Incr = IRB.CreateBinaryIntrinsic(Intrinsic::umax, Incr, One);
 
       }
 
       StoreInst *StoreCtx = IRB.CreateStore(Incr, MapPtrIdx);
-      SetNoSanitizeMetadata(StoreCtx);
+      setNoSanitizeMetadata(StoreCtx);
 
     }
 
@@ -1131,6 +1113,9 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
   if (first) { first = 0; }
   selects += cnt_sel;
 
+  FuncMapPtr = NULL;
+  if (AFLMapPtr) { FuncMapPtr = hoistMapPointerLoad(F, AFLMapPtr, PtrTy); }
+
   uint32_t special = 0, local_selects = 0;
 
   for (auto &BB : F) {
@@ -1156,7 +1141,7 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
         Value *GuardPtr = createGuardPointer(
             IRB, special++ + local_selects + AllBlocks.size() - skip_blocks);
         LoadInst *Idx = IRB.CreateLoad(IRB.getInt32Ty(), GuardPtr);
-        SetNoSanitizeMetadata(Idx);
+        setNoSanitizeMetadata(Idx);
 
         auto *callInst = dyn_cast<CallInst>(&IN);
         callInst->setOperand(1, Idx);
@@ -1340,11 +1325,7 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
         }
 
-        // Load SHM pointer and update coverage bitmap
-        LoadInst *MapPtr = IRB.CreateLoad(PtrTy, AFLMapPtr);
-        SetNoSanitizeMetadata(MapPtr);
-
-        updateCoverageForSelect(IRB, result, MapPtr, vector_cnt);
+        updateCoverageForSelect(IRB, result, FuncMapPtr, vector_cnt);
         instr += vector_cnt;
 
       }
@@ -1427,12 +1408,7 @@ void ModuleSanitizerCoverageAFL::InjectCoverageAtBlock(Function   &F,
     Value *GuardPtr = createGuardPointer(IRB, Idx);
 
     LoadInst *CurLoc = IRB.CreateLoad(IRB.getInt32Ty(), GuardPtr);
-    ModuleSanitizerCoverageAFL::SetNoSanitizeMetadata(CurLoc);
-
-    /* Load SHM pointer */
-
-    LoadInst *MapPtr = IRB.CreateLoad(PtrTy, AFLMapPtr);
-    ModuleSanitizerCoverageAFL::SetNoSanitizeMetadata(MapPtr);
+    setNoSanitizeMetadata(CurLoc);
 
     /* Load counter for CurLoc */
 
@@ -1442,17 +1418,17 @@ void ModuleSanitizerCoverageAFL::InjectCoverageAtBlock(Function   &F,
     if (ijon_enabled && AFLIJONState) {
 
       LoadInst *IJONStateVal = IRB.CreateLoad(Int32Ty, AFLIJONState);
-      SetNoSanitizeMetadata(IJONStateVal);
+      setNoSanitizeMetadata(IJONStateVal);
       // Apply IJON formula: state XOR coverage_index
       Value *XorResult = IRB.CreateXor(IJONStateVal, CoverageIndex);
       // Ensure result stays within map bounds to prevent buffer overruns
       LoadInst *CovMapSize = IRB.CreateLoad(Int32Ty, AFLCovMapSize);
-      SetNoSanitizeMetadata(CovMapSize);
+      setNoSanitizeMetadata(CovMapSize);
       CoverageIndex = IRB.CreateURem(XorResult, CovMapSize);
 
     }
 
-    updateCoverageBitmap(IRB, CoverageIndex, MapPtr);
+    updateCoverageBitmap(IRB, CoverageIndex, FuncMapPtr);
 
     // done :)
 

@@ -55,6 +55,7 @@ typedef long double max_align_t;
 #include "llvm/IR/CFG.h"
 
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Intrinsics.h"
 
 #include "afl-llvm-common.h"
 #include "llvm-alternative-coverage.h"
@@ -726,10 +727,7 @@ PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &MAM) {
            * Counter + OverflowFlag -> Counter
            */
 
-          ConstantInt *Zero = ConstantInt::get(Int8Ty, 0);
-          auto         cf = IRB.CreateICmpEQ(Incr, Zero);
-          auto         carry = IRB.CreateZExt(cf, Int8Ty);
-          Incr = IRB.CreateAdd(Incr, carry);
+          Incr = IRB.CreateBinaryIntrinsic(llvm::Intrinsic::umax, Incr, One);
 
         }
 
