@@ -568,6 +568,30 @@ static void fasan_check_afl_preload(char *afl_preload) {
 
 }
 
+/* Throttle syncs by `sync_time` and `sync_interval_cnt`. Pass NULL for
+   sync_interval_cnt to only limit by sync_time. Main node sync time is half of
+   secondary nodes, and a third of SYNC_INTERVAL
+ */
+static void maybe_sync_fuzzers(afl_state_t *afl, u64 cur_time,
+                               u32 *sync_interval_cnt) {
+
+  u64 sync_time = afl->is_main_node ? afl->sync_time >> 1 : afl->sync_time;
+
+  if (unlikely(cur_time > sync_time + afl->last_sync_time)) {
+
+    u32 sync_interval = afl->is_main_node ? SYNC_INTERVAL / 3 : SYNC_INTERVAL;
+
+    if (NULL == sync_interval_cnt ||
+        !((*sync_interval_cnt)++ % sync_interval)) {
+
+      sync_fuzzers(afl);
+
+    }
+
+  }
+
+}
+
 /* Main entry point */
 
 int main(int argc, char **argv_orig, char **envp) {
@@ -3365,7 +3389,8 @@ int main(int argc, char **argv_orig, char **envp) {
 
         }
 
-        sync_fuzzers(afl);
+        /* sync only based on sync_time, not sync_interval_cnt */
+        maybe_sync_fuzzers(afl, get_cur_time(), NULL);
 
       }
 
@@ -3696,27 +3721,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
     if (likely(!afl->stop_soon && afl->sync_id)) {
 
-      if (unlikely(afl->is_main_node)) {
-
-        if (unlikely(cur_time > (afl->sync_time >> 1) + afl->last_sync_time)) {
-
-          if (!(sync_interval_cnt++ % (SYNC_INTERVAL / 3))) {
-
-            sync_fuzzers(afl);
-
-          }
-
-        }
-
-      } else {
-
-        if (unlikely(cur_time > afl->sync_time + afl->last_sync_time)) {
-
-          if (!(sync_interval_cnt++ % SYNC_INTERVAL)) { sync_fuzzers(afl); }
-
-        }
-
-      }
+      maybe_sync_fuzzers(afl, cur_time, &sync_interval_cnt);
 
     }
 
