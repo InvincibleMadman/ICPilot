@@ -418,9 +418,12 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
           cast_size = 64;
           break;
         default:
+          // 65-128 bit values are handled via 128-bit hooks.
           cast_size = 128;
 
       }
+
+      bool use_hookN = cast_size == 128 && cast_size != max_size;
 
       // XXX FIXME BUG TODO
       if (is_fp && vector_cnt) { continue; }
@@ -521,7 +524,7 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
           ConstantInt *attribute = ConstantInt::get(Int8Ty, attr);
           args.push_back(attribute);
 
-          if (cast_size != max_size) {
+          if (use_hookN) {
 
             ConstantInt *bitsize = ConstantInt::get(Int8Ty, (max_size / 8) - 1);
             args.push_back(bitsize);
@@ -546,13 +549,13 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
               IRB.CreateCall(cmplogHookIns8, args);
               break;
             case 128:
-              if (max_size == 128) {
+              if (use_hookN) {
 
-                IRB.CreateCall(cmplogHookIns16, args);
+                IRB.CreateCall(cmplogHookInsN, args);
 
               } else {
 
-                IRB.CreateCall(cmplogHookInsN, args);
+                IRB.CreateCall(cmplogHookIns16, args);
 
               }
 
@@ -604,4 +607,3 @@ PreservedAnalyses CmpLogInstructions::run(Module                &M,
     return PreservedAnalyses();
 
 }
-
