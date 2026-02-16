@@ -1049,17 +1049,10 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
         } else if (cxchg) {
 
-          if (cxchg->getType()->isIntegerTy(1)) {
-
-            block_is_instrumented = true;
-            cnt_sel++;
-            cnt_sel_inc += 2;
-
-          } else {
-
-            unhandled++;
-
-          }
+          // cmpxchg returns {T, i1}, always a struct — no type guard needed
+          block_is_instrumented = true;
+          cnt_sel++;
+          cnt_sel_inc += 2;
 
         } else if (rmw) {
 
@@ -1230,8 +1223,6 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
           // fprintf(stderr, "Fcmp!\n");
 
         } else if (cxchg) {
-
-          if (!cxchg->getType()->isIntegerTy(1)) { continue; }
 
           if (debug) printDebugInfo(IN);
 
