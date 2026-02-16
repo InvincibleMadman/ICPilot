@@ -186,6 +186,7 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
                                             Int64Ty, Int64Ty, Int8Ty);
   FunctionCallee cmplogHookIns8 = c8;
 
+#if INTPTR_MAX != INT32_MAX
   FunctionCallee c16 = M.getOrInsertFunction("__cmplog_ins_hook16", VoidTy,
                                              Int128Ty, Int128Ty, Int8Ty);
   FunctionCallee cmplogHookIns16 = c16;
@@ -193,6 +194,7 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
   FunctionCallee cN = M.getOrInsertFunction("__cmplog_ins_hookN", VoidTy,
                                             Int128Ty, Int128Ty, Int8Ty, Int8Ty);
   FunctionCallee cmplogHookInsN = cN;
+#endif
 
   GlobalVariable *AFLCmplogPtr = M.getNamedGlobal("__afl_cmp_map");
 
@@ -549,6 +551,7 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
               IRB.CreateCall(cmplogHookIns8, args);
               break;
             case 128:
+#if INTPTR_MAX != INT32_MAX
               if (use_hookN) {
 
                 IRB.CreateCall(cmplogHookInsN, args);
@@ -558,6 +561,8 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
                 IRB.CreateCall(cmplogHookIns16, args);
 
               }
+
+#endif
 
               break;
 
@@ -607,3 +612,4 @@ PreservedAnalyses CmpLogInstructions::run(Module                &M,
     return PreservedAnalyses();
 
 }
+

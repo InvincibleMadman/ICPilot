@@ -84,8 +84,14 @@ test_bitint "_BitInt(48)" 48 "__cmplog_ins_hook8"
 test_bitint "_BitInt(16)" 16 "__cmplog_ins_hook2"
 test_bitint "_BitInt(32)" 32 "__cmplog_ins_hook4"
 test_bitint "_BitInt(64)" 64 "__cmplog_ins_hook8"
-test_bitint "_BitInt(100)" 100 "__cmplog_ins_hookN"
-test_bitint "_BitInt(128)" 128 "__cmplog_ins_hook16"
+
+if [ "$(getconf LONG_BIT 2>/dev/null)" = "64" ]; then
+    # >64-bit compares are only supported on 64-bit systems.
+    test_bitint "_BitInt(100)" 100 "__cmplog_ins_hookN"
+    test_bitint "_BitInt(128)" 128 "__cmplog_ins_hook16"
+else
+    echo "Skipping >64-bit hook checks on 32-bit host"
+fi
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
