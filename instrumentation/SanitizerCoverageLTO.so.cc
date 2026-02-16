@@ -2263,17 +2263,6 @@ void ModuleSanitizerCoverageLTO::InjectCoverageAtBlock(Function   &F,
   BasicBlock::iterator IP = BB.getFirstInsertionPt();
   bool                 IsEntryBB = &BB == &F.getEntryBlock();
 
-  auto markAflSkip = [&](Value *V) {
-
-    if (auto *InstV = dyn_cast<Instruction>(V)) {
-
-      LLVMContext &Ctx = InstV->getContext();
-      InstV->setMetadata("afl.skip", MDNode::get(Ctx, {}));
-
-    }
-
-  };
-
   if (IsEntryBB) {
 
     // Keep static allocas and llvm.localescape calls in the entry block.  Even
