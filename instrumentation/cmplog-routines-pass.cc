@@ -170,6 +170,7 @@ bool CmpLogRoutines::hookRtns(Module &M) {
 
           Function *Callee = callInst->getCalledFunction();
           if (!Callee) continue;
+          if (Callee->isIntrinsic()) continue;
           if (callInst->getCallingConv() != llvm::CallingConv::C) continue;
 
           FunctionType *FT = Callee->getFunctionType();
