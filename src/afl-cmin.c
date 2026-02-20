@@ -2362,6 +2362,10 @@ int main(int argc, char **argv) {
 
   target_bin = argv[optind];
   target_args = (u8 **)(argv + optind);
+  if (qemu_mode) {
+    target_args = (u8**) get_qemu_argv(argv[0], &target_bin, argc - optind,
+                                       argv + optind);
+  }
 
   if (stdin_file && exec_workers > 1) {
 
