@@ -2841,7 +2841,8 @@ param_st parse_misc_params(aflcc_state_t *aflcc, u8 *cur_argv, u8 scan) {
 
     SCAN_KEEP(aflcc->preprocessor_only, 1);
 
-  } else if (!strcmp(cur_argv, "--target=wasm32-wasi")) {
+  } else if (!strcmp(cur_argv, "--target=wasm32-wasi") ||
+             !strcmp(cur_argv, "--target=wasm32-wasip1")) {
 
     SCAN_KEEP(aflcc->passthrough, 1);
 
