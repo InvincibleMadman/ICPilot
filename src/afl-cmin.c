@@ -106,7 +106,8 @@ static u8 debug_mode,                  /* debug mode                        */
     frida_mode,                        /* Frida mode                        */
     qemu_mode,                         /* QEMU mode                         */
     unicorn_mode,                      /* Unicorn mode                      */
-    nyx_mode;                          /* Nyx mode                          */
+    nyx_mode,                          /* Nyx mode                          */
+    wine_mode;                         /* Wine mode                         */
 
 static cmin_file_t **files;
 static u32           items;
@@ -905,6 +906,7 @@ static char **prepare_fsrv(afl_forkserver_t *fsrv, sharedmem_t *shm,
     fsrv->nyx_standalone = true;
     fsrv->nyx_id = id;
     fsrv->nyx_use_tmp_workdir = true;
+    fsrv->nyx_bind_cpu_id = 0;
 
     u8 *libnyx_binary = find_afl_binary(progname, "libnyx.so");
     fsrv->nyx_handlers = afl_load_libnyx_plugin(libnyx_binary);
@@ -1916,6 +1918,7 @@ static void usage(u8 *argv0) {
       "  -t msec     - timeout for each run (default: 5000ms)\n"
       "  -O          - use binary-only instrumentation (FRIDA mode)\n"
       "  -Q          - use binary-only instrumentation (QEMU mode)\n"
+      "  -W          - use binary-only instrumentation (WINE mode)\n"
       "  -U          - use unicorn-based instrumentation (Unicorn mode)\n"
       "  -X          - use Nyx mode\n\n"
 
@@ -2162,7 +2165,7 @@ int main(int argc, char **argv) {
 
   cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
 
-  while ((opt = getopt_long(argc, argv, "+i:o:f:m:t:T:OQUXACeh", long_options,
+  while ((opt = getopt_long(argc, argv, "+i:o:f:m:t:T:OQUWXACeh", long_options,
                             &option_index)) != -1) {
 
     if (opt == 0) {
@@ -2321,6 +2324,12 @@ int main(int argc, char **argv) {
 
       case 'O':
         frida_mode = 1;
+        setenv("AFL_FRIDA_INST_SEED", "1", 1);
+        break;
+
+      case 'W':
+        wine_mode = 1;
+        qemu_mode = 1;
         break;
 
       case 'Q':
@@ -2363,8 +2372,19 @@ int main(int argc, char **argv) {
   target_bin = argv[optind];
   target_args = (u8 **)(argv + optind);
   if (qemu_mode) {
-    target_args = (u8 **)get_qemu_argv(argv[0], &target_bin, argc - optind,
-                                       argv + optind);
+
+    if (wine_mode) {
+
+      target_args = (u8 **)get_wine_argv(argv[0], &target_bin, argc - optind,
+                                         argv + optind);
+
+    } else {
+
+      target_args = (u8 **)get_qemu_argv(argv[0], &target_bin, argc - optind,
+                                         argv + optind);
+
+    }
+
   }
 
   if (stdin_file && exec_workers > 1) {
