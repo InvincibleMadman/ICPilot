@@ -729,8 +729,17 @@ bool isAflCovInterestingInstruction(Instruction &I) {
 
     }
 
-    case Instruction::Select:
-      return true;
+    case Instruction::Select: {
+
+      auto   selectInst = dyn_cast<SelectInst>(&I);
+      Value *condition = selectInst->getCondition();
+      auto   t = condition->getType();
+
+      if (t->getTypeID() == llvm::Type::IntegerTyID) return true;
+
+      return false;
+
+    }
 
     case Instruction::AtomicCmpXchg:
       return true;

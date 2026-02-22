@@ -24,6 +24,7 @@
     - marked GCC plugins as unmaintained. We need someone who know gimple and
       is willing to fix the plugin issues, workarounds for gcc bugs and
       overall improve the plugin.
+    - optimize hidden CFG instrumentation (don't instrument vector selects)
   - afl-cmin:
     - new implementation in C by @kcwu - thanks! (it is the default now)
     - afl-cmin.py was changing behaviour to hash the original filenames,
