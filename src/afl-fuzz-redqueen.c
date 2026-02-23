@@ -740,24 +740,27 @@ static u32 from_base64(u8 *src, u8 *dst, u32 dst_len) {
   return ret;
 
 }
-
-static u32 to_base64(u8 *src, u8 *dst, u32 dst_len) {
-
+static u32 to_base64(u8 *src, u8 *dst, u32 src_len) {
+   /**
+   src -> source buffer (input)
+   dst -> destination buffer (output)
+   src_len -> source buffer length
+   **/
   u32 i, j, v;
   //  u32 len = (dst_len >> 2) * 3;
-  u32 len = (dst_len / 3) * 4;
-  if (dst_len % 3) len += 4;
+  u32 len = (src_len / 3) * 4;
+  if (src_len % 3) len += 4;
 
   for (i = 0, j = 0; j < len; i += 3, j += 4) {
 
     v = src[i];
-    v = i + 1 < len ? v << 8 | src[i + 1] : v << 8;
-    v = i + 2 < len ? v << 8 | src[i + 2] : v << 8;
+    v = i + 1 < src_len ? v << 8 | src[i + 1] : v << 8;
+    v = i + 2 < src_len ? v << 8 | src[i + 2] : v << 8;
 
     dst[j] = base64_encode_table[(v >> 18) & 0x3F];
     dst[j + 1] = base64_encode_table[(v >> 12) & 0x3F];
 
-    if (i + 1 < dst_len) {
+    if (i + 1 < src_len) {
 
       dst[j + 2] = base64_encode_table[(v >> 6) & 0x3F];
 
@@ -767,7 +770,7 @@ static u32 to_base64(u8 *src, u8 *dst, u32 dst_len) {
 
     }
 
-    if (i + 2 < dst_len) {
+    if (i + 2 < src_len) {
 
       dst[j + 3] = base64_encode_table[v & 0x3F];
 
