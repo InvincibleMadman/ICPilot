@@ -2694,18 +2694,19 @@ void __sanitizer_cov_trace_switch(uint64_t val, uint64_t *cases) {
 
 }
 
-__attribute__((weak)) void *__asan_region_is_poisoned(void *beg, size_t size) {
-
-  return NULL;
-
-}
+__attribute__((weak)) void *__asan_region_is_poisoned(void *beg, size_t size);
 
 // POSIX shenanigan to see if an area is mapped.
 // If it is mapped as X-only, we have a problem, so maybe we should add a check
 // to avoid to call it on .text addresses
 static int area_is_valid(void *ptr, size_t len) {
 
-  if (unlikely(!ptr || __asan_region_is_poisoned(ptr, len))) { return 0; }
+  if (unlikely(!ptr || (__asan_region_is_poisoned &&
+                        __asan_region_is_poisoned(ptr, len)))) {
+
+    return 0;
+
+  }
 
 #ifdef __HAIKU__
   long r = _kern_write(__afl_dummy_fd[1], -1, ptr, len);

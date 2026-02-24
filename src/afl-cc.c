@@ -2032,12 +2032,6 @@ void add_sanitizers(aflcc_state_t *aflcc, char **envp) {
     if (getenv("AFL_HARDEN"))
       FATAL("ASAN and AFL_HARDEN are mutually exclusive");
 
-    if (aflcc->compiler_mode == GCC_PLUGIN && !aflcc->have_staticasan) {
-
-      insert_param(aflcc, "-static-libasan");
-
-    }
-
     add_defs_fortify(aflcc, 0);
     if (!aflcc->have_asan) {
 

@@ -132,25 +132,12 @@ __attribute__((weak)) void    LLVMFuzzerCleanup(void);
 __attribute__((weak)) int     LLVMFuzzerRunDriver(
         int *argc, char ***argv, int (*callback)(const uint8_t *data, size_t size));
 
-// Default nop ASan hooks for manual poisoning when not linking the ASan
-// runtime
+// ASan manual poisoning hooks, if present
 // https://github.com/google/sanitizers/wiki/AddressSanitizerManualPoisoning
 __attribute__((weak)) void __asan_poison_memory_region(
-    void const volatile *addr, size_t size) {
-
-  (void)addr;
-  (void)size;
-
-}
-
+    void const volatile *addr, size_t size);
 __attribute__((weak)) void __asan_unpoison_memory_region(
-    void const volatile *addr, size_t size) {
-
-  (void)addr;
-  (void)size;
-
-}
-
+    void const volatile *addr, size_t size);
 __attribute__((weak)) void *__asan_region_is_poisoned(void *beg, size_t size);
 
 // Notify AFL about persistent mode.
@@ -269,8 +256,9 @@ static int ExecuteFilesOnyByOne(int argc, char **argv,
                                                 size_t         size)) {
 
   unsigned char *buf = (unsigned char *)malloc(MAX_FILE);
+  bool           have_asan = __asan_region_is_poisoned;
 
-  __asan_poison_memory_region(buf, MAX_FILE);
+  if (have_asan) { __asan_poison_memory_region(buf, MAX_FILE); }
   ssize_t prev_length = 0;
 
   for (int i = 1; i < argc; i++) {
@@ -289,13 +277,18 @@ static int ExecuteFilesOnyByOne(int argc, char **argv,
 
     if (length > 0) {
 
-      if (length < prev_length) {
+      if (have_asan) {
 
-        __asan_poison_memory_region(buf + length, prev_length - length);
+        if (length < prev_length) {
 
-      } else {
+          __asan_poison_memory_region(buf + length, prev_length - length);
 
-        __asan_unpoison_memory_region(buf + prev_length, length - prev_length);
+        } else {
+
+          __asan_unpoison_memory_region(buf + prev_length,
+                                        length - prev_length);
+
+        }
 
       }
 
@@ -436,11 +429,12 @@ __attribute__((weak)) int LLVMFuzzerRunDriver(
 
   __afl_manual_init();
 
-  __asan_poison_memory_region(__afl_fuzz_ptr, MAX_FILE);
   size_t prev_length = 0;
 
   // for speed only insert asan functions if the target is linked with asan
   if (unlikely(__asan_region_is_poisoned)) {
+
+    __asan_poison_memory_region(__afl_fuzz_ptr, MAX_FILE);
 
     while (__afl_persistent_loop(N)) {
 
