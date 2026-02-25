@@ -26,7 +26,8 @@
       overall improve the plugin.
     - optimize hidden CFG instrumentation (don't instrument vector selects)
   - afl-cmin:
-    - new implementation in C by @kcwu - thanks! (it is the default now)
+    - new implementation in C by @kcwu - it is currenlty not built though
+      because of maturity reasons
     - afl-cmin.py was changing behaviour to hash the original filenames,
       this was reverted.
     - afl-cmin and afl-cmin.py honor `AFL_SHA1_FILENAMES` now
