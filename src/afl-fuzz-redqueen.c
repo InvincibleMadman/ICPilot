@@ -740,14 +740,10 @@ static u32 from_base64(u8 *src, u8 *dst, u32 dst_len) {
   return ret;
 
 }
+
 static u32 to_base64(u8 *src, u8 *dst, u32 src_len) {
-   /**
-   src -> source buffer (input)
-   dst -> destination buffer (output)
-   src_len -> source buffer length
-   **/
+
   u32 i, j, v;
-  //  u32 len = (dst_len >> 2) * 3;
   u32 len = (src_len / 3) * 4;
   if (src_len % 3) len += 4;
 
