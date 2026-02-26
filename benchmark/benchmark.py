@@ -71,6 +71,9 @@ parser.add_argument("-c", "--comment", help="add a comment about your setup", ty
 parser.add_argument("--cpu", help="override the detected CPU model name", type=str, default="")
 parser.add_argument("--mhz", help="override the detected CPU MHz", type=str, default="")
 parser.add_argument(
+    "-e", "--env", help="set extra environment variable (KEY=VALUE), can be repeated", action="append", default=[], metavar="KEY=VALUE"
+)
+parser.add_argument(
     "-t", "--target", help="pick targets", action="append", default=["test-instr-persist-shmem"], choices=targets
 )
 args = parser.parse_args()
@@ -80,6 +83,11 @@ if len(args.target) > 1:
     args.target = args.target[1:]
 if len(args.mode) > 2:
     args.mode = args.mode[2:]
+for kv in args.env:
+    if "=" not in kv:
+        sys.exit(red(f" [*] Error: --env value '{kv}' is not in KEY=VALUE format."))
+    k, v = kv.split("=", 1)
+    env_vars[k] = v
 
 chosen_modes = [mode for mode in all_modes if mode.name in args.mode]
 chosen_targets = [target for target in all_targets if str(target.binary) in args.target]
