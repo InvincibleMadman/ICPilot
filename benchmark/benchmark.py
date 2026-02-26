@@ -257,7 +257,12 @@ async def main() -> None:
                     cmds.append(["afl-fuzz", "-i", f"{args.basedir}/in"] + name + ["-s", "123", "-V10", "-D", f"./{binary}"])
                 # Prepare the afl-fuzz tasks, and then block while waiting for them to finish.
                 fuzztasks = [run_command(cmds[cpu]) for cpu in fuzzers]
-                await asyncio.gather(*fuzztasks)
+                fuzz_results = await asyncio.gather(*fuzztasks)
+                for fuzzer_idx, (returncode, stdout, stderr) in enumerate(fuzz_results):
+                    if returncode != 0:
+                        print(red(f" [!] afl-fuzz worker {fuzzer_idx} exited with code {returncode}"))
+                        if stdout: print(red(f"     stdout: {stdout.decode(errors='replace').strip()}"))
+                        if stderr: print(red(f"     stderr: {stderr.decode(errors='replace').strip()}"))
                 afl_versions = await colon_values(f"{outdir}/0/fuzzer_stats", "afl_version")
                 if results.config:
                     results.config.afl_version = afl_versions[0]
