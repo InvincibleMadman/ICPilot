@@ -419,6 +419,8 @@ bool CmpLogInstructions::hookInstrs(Module &M, LoopInfoCallback LICallback) {
         case 33 ... 64:
           cast_size = 64;
           break;
+        case 80:
+          continue;
         default:
           // 65-128 bit values are handled via 128-bit hooks.
           cast_size = 128;
