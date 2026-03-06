@@ -934,13 +934,10 @@ static void set_up_environment(afl_forkserver_t *fsrv, char **argv) {
 	u8 *use_dir = get_afl_env("TMPDIR");
 	
 	if (!use_dir) {
-    	u8 *use_dir = ".";
+    	use_dir = ".";
 
 	    if (access(use_dir, R_OK | W_OK | X_OK)) {
-
-			use_dir = get_afl_env("TMPDIR");
-      	
-			if (!use_dir) { use_dir = "/tmp"; }
+			use_dir = "/tmp";
 		}	
     }
 
