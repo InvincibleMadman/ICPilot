@@ -135,7 +135,7 @@ Questions? Concerns? Bug reports?
 * Take a look at our [FAQ](docs/FAQ.md). If you find an interesting or important
   question missing, submit it via
   [https://github.com/AFLplusplus/AFLplusplus/discussions](https://github.com/AFLplusplus/AFLplusplus/discussions).
-* Best: join the [Awesome Fuzzing](https://discord.gg/gCraWct) Discord server.
+* Best: join the [Fuzzing Zulip server](https://fuzz.zulipchat.com/).
 * There is a (not really used) mailing list for the AFL/AFL++ project
   ([browse archive](https://groups.google.com/group/afl-users)). To compare
   notes with other users or to get notified about major new features, send an
