@@ -889,8 +889,8 @@ static char **prepare_fsrv(afl_forkserver_t *fsrv, sharedmem_t *shm,
 
   /* Set binary-only mode flags before afl_fsrv_setup_preload() so the
      correct LD_PRELOAD (e.g. afl-frida-trace.so) is injected. */
-  fsrv->frida_mode   = frida_mode;
-  fsrv->qemu_mode    = qemu_mode;
+  fsrv->frida_mode = frida_mode;
+  fsrv->qemu_mode = qemu_mode;
   fsrv->unicorn_mode = unicorn_mode;
 
   afl_fsrv_setup_preload(fsrv, target_bin);
@@ -1063,8 +1063,8 @@ static void exec_worker(worker_data_t *data, u32 *shared_cmin_idx) {
 
     afl_shm_deinit(&shm_fuzz);
     fsrv->support_shmem_fuzz = 0;
-    fsrv->shmem_fuzz_len     = NULL;
-    fsrv->shmem_fuzz         = NULL;
+    fsrv->shmem_fuzz_len = NULL;
+    fsrv->shmem_fuzz = NULL;
 
   }
 
@@ -1243,8 +1243,8 @@ static void cmin_detect_map_size(void) {
     set_sanitizer_defaults();
 
     /* Propagate binary-only mode flags before preload setup. */
-    fsrv.frida_mode   = frida_mode;
-    fsrv.qemu_mode    = qemu_mode;
+    fsrv.frida_mode = frida_mode;
+    fsrv.qemu_mode = qemu_mode;
     fsrv.unicorn_mode = unicorn_mode;
 
     afl_fsrv_setup_preload(&fsrv, target_bin);
@@ -1846,7 +1846,7 @@ static void test_target_binary(void) {
   /* Set up shared-memory test-case delivery; the fork server negotiates
      shmem-fuzz support during the handshake (needed for Frida/QEMU). */
   sharedmem_t shm_fuzz = {0};
-  u8 *fuzz_map =
+  u8         *fuzz_map =
       afl_shm_init(&shm_fuzz, MAX_FILE + sizeof(u32), 1, DEFAULT_PERMISSION, 0);
 
   if (fuzz_map) {
@@ -1869,8 +1869,8 @@ static void test_target_binary(void) {
 
     afl_shm_deinit(&shm_fuzz);
     fsrv.support_shmem_fuzz = 0;
-    fsrv.shmem_fuzz_len     = NULL;
-    fsrv.shmem_fuzz         = NULL;
+    fsrv.shmem_fuzz_len = NULL;
+    fsrv.shmem_fuzz = NULL;
 
   }
 
