@@ -68,34 +68,52 @@ for arg in "$@"; do
 
     if [ ! -f "$absdir/plot_data" ]; then
 
-      if [ -f "$absdir/default/plot_data" ]; then
+      if [ "$NARGS" -gt 2 ]; then
 
-        echo "[-] Error: input directory '$absdir' is not valid (missing 'plot_data'), likely you mean $absdir/default?" 1>&2
-        exit 1
+        if [ -f "$absdir/default/plot_data" ]; then
+          echo "[!] Warning: skipping '$absdir' (missing 'plot_data'), did you mean $absdir/default?" 1>&2
+        else
+          echo "[!] Warning: skipping '$absdir' (missing 'plot_data')." 1>&2
+        fi
 
       else
 
-        echo "[-] Error: input directory '$absdir' is not valid (missing 'plot_data')." 1>&2
+        if [ -f "$absdir/default/plot_data" ]; then
+          echo "[-] Error: input directory '$absdir' is not valid (missing 'plot_data'), likely you mean $absdir/default?" 1>&2
+        else
+          echo "[-] Error: input directory '$absdir' is not valid (missing 'plot_data')." 1>&2
+        fi
         exit 1
 
       fi
 
+    elif [ "`wc -l < "$absdir/plot_data"`" -lt 3 ]; then
+      
+      if [ "$NARGS" -gt 2 ]; then
+
+        echo "[!] Warning: skipping '$absdir/plot_data' (too little data, let it run longer)." 1>&2
+
+      else
+
+        echo "[-] Error: '$absdir/plot_data' carries too little data, let it run longer." 1>&2
+        exit 1
+
+      fi
+
+    else
+
+      INPUTDIRS="$INPUTDIRS $absdir"
+      INPUTCOUNT=$((INPUTCOUNT + 1))
+
     fi
-
-    LINES=`wc -l < "$absdir/plot_data"`
-
-    if [ "$LINES" -lt 3 ]; then
-
-      echo "[-] Error: '$absdir/plot_data' carries too little data, let it run longer." 1>&2
-      exit 1
-
-    fi
-
-    INPUTDIRS="$INPUTDIRS $absdir"
-    INPUTCOUNT=$((INPUTCOUNT + 1))
   fi
   IDX=$((IDX + 1))
 done
+
+if [ "$INPUTCOUNT" -eq 0 ]; then
+  echo "[-] Error: none of the specified input directories contain valid plot data." 1>&2
+  exit 1
+fi
 
 # The primary inputdir (for backwards compatibility/single-dir mode)
 inputdir=$(echo "$INPUTDIRS" | awk '{print $1}')
