@@ -5,7 +5,7 @@
 #
 # Originally written by Michal Zalewski
 # Based on a design & prototype by Michael Rash.
-# Support extended to multiple input directories by Jay Shah
+# Support extended to multiple input directories by Jay 'jay-1409' Shah
 # Copyright 2014, 2015 Google Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,6 +56,10 @@ _EOF_
 fi
 
 # Collect all arguments; the last one is outputdir, the rest are input dirs.
+# When multiple input dirs are given (e.g. afl-plot out/* graph_dir), we skip
+# dirs with missing or insufficient plot_data with a warning instead of a fatal
+# error, so that glob patterns work even if some dirs belong to other fuzzers.
+# With a single input dir, we preserve the original hard-error behavior.
 NARGS=$#
 IDX=1
 INPUTDIRS=""
@@ -87,8 +91,10 @@ for arg in "$@"; do
 
       fi
 
+    # assuming that the plot_data needs at least 3 lines (1 header + 2 data points) for
+    # gnuplot to draw meaningful trend lines between points.
     elif [ "`wc -l < "$absdir/plot_data"`" -lt 3 ]; then
-      
+
       if [ "$NARGS" -gt 2 ]; then
 
         echo "[!] Warning: skipping '$absdir/plot_data' (too little data, let it run longer)." 1>&2
@@ -110,6 +116,7 @@ for arg in "$@"; do
   IDX=$((IDX + 1))
 done
 
+# After skipping invalid dirs, make sure we still have something to plot.
 if [ "$INPUTCOUNT" -eq 0 ]; then
   echo "[-] Error: none of the specified input directories contain valid plot data." 1>&2
   exit 1
