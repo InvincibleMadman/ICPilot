@@ -424,7 +424,7 @@ if [ ! -s "$outputdir/exec_speed.png" ]; then
 
 fi
 
-echo "[*] Generating index.html..."
+echo "[*] Generating $outputdir/index.html ..."
 
 if [ "$INPUTCOUNT" -eq 1 ]; then
 
