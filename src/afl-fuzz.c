@@ -4003,6 +4003,13 @@ stop_fuzzing:
   ck_free(afl->n_fuzz);
   ck_free(afl->n_fuzz_dup);
   ck_free(afl->simplified_n_fuzz);
+  if (afl->frameshift_index_buffer) { free(afl->frameshift_index_buffer); }
+  if (afl->fs_curr_meta) {
+
+    if (afl->fs_curr_meta->relations) { free(afl->fs_curr_meta->relations); }
+    free(afl->fs_curr_meta);
+
+  }
 
   if (afl->orig_cmdline) { ck_free(afl->orig_cmdline); }
   ck_free(afl->fsrv.target_path);

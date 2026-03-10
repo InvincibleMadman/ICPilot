@@ -346,8 +346,10 @@ u8 fuzz_one_original(afl_state_t *afl) {
     /* Use IJON input data that was set up in fuzz_one() */
     len = afl->ijon_input_len;
     in_buf = orig_in = afl->ijon_input_data;
-    out_buf = ck_alloc_nozero(len);
-    memcpy(out_buf, in_buf, len);
+    u8 *new_buf = afl_realloc(AFL_BUF_PARAM(out_scratch), len + 15);
+    if (unlikely(!new_buf)) { PFATAL("alloc"); }
+    memcpy(new_buf, in_buf, len);
+    afl_swap_bufs(AFL_BUF_PARAM(out), AFL_BUF_PARAM(out_scratch));
 
     /* Setup variables for havoc stage */
     temp_len = len;
