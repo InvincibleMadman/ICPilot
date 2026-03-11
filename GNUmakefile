@@ -64,8 +64,6 @@ endif
 ifdef NO_SPLICING
   $(info The NO_SPLICING parameter is deprecated)
 endif
-
-
 ifdef CODE_COVERAGE
   override CFLAGS += -D__AFL_CODE_COVERAGE=1
 endif
@@ -169,7 +167,8 @@ ifdef DEBUG
   $(info Compiling DEBUG version of binaries)
   override CFLAGS += -ggdb3 -O0 -Wall -Wextra -Werror $(CFLAGS_OPT)
 else
-  CFLAGS ?= -O2 $(CFLAGS_OPT) # -funroll-loops is slower on modern compilers
+  CFLAGS ?= -O2
+  override CFLAGS += $(CFLAGS_OPT)
 endif
 
 override CFLAGS += -g -Wno-pointer-sign -Wno-variadic-macros -Wall -Wextra -Wno-pointer-arith \
