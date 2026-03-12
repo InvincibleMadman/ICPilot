@@ -38,6 +38,9 @@
 #include "cmplog.h"
 #include "asanfuzz.h"
 
+static u8 *input_data;
+static u32 input_len;
+
 #ifdef PROFILING
 u64 time_spent_working = 0;
 #endif
@@ -108,61 +111,11 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
 
     /* UNIFIED SHARED MEMORY ACCESS: Always use dynamic allocation */
 
-    // Get current input data for IJON processing
-    u8 *input_data = NULL;
-    u32 input_len = 0;
-
-    /* Read input data from testcase file that was just executed */
-    if (afl->fsrv.out_file) {
-
-      struct stat st;
-      if (stat(afl->fsrv.out_file, &st) == 0) {
-
-        if (st.st_size > 0) {
-
-          input_len = st.st_size;
-          input_data = ck_alloc(input_len);
-
-          int fd = open(afl->fsrv.out_file, O_RDONLY);
-          if (fd >= 0) {
-
-            ssize_t bytes_read = read(fd, input_data, input_len);
-            close(fd);
-
-            if (bytes_read != input_len) {
-
-              ck_free(input_data);
-              input_data = NULL;
-              input_len = 0;
-
-            }
-
-          } else {
-
-            ck_free(input_data);
-            input_data = NULL;
-            input_len = 0;
-
-          }
-
-        }
-
-      }
-
-    }
-
-    if (input_data) {
+    if (likely(input_data && input_len)) {
 
       /* Use pre-initialized shared_access from afl state */
       ijon_update_max_dynamic(afl->ijon_state, afl->ijon_shared_access,
                               input_data, input_len);
-
-    }
-
-    if (input_data) {
-
-      ck_free(input_data);
-      input_data = NULL;
 
     }
 
@@ -317,6 +270,13 @@ u32 __attribute__((hot)) write_to_testcase(afl_state_t *afl, void **mem,
 
   }
 
+  if (unlikely(afl->ijon_bits)) {
+
+    input_data = *mem;
+    input_len = len;
+
+  }
+
 #ifdef _AFL_DOCUMENT_MUTATIONS
   s32  doc_fd;
   char fn[PATH_MAX];
@@ -429,7 +389,6 @@ static void write_with_gap(afl_state_t *afl, u8 *mem, u32 len, u32 skip_at,
     } else {
 
       memcpy(afl->fsrv.shmem_fuzz, mem, skip_at);
-
       memcpy(afl->fsrv.shmem_fuzz + skip_at, mem + skip_at + skip_len,
              tail_len);
 
@@ -492,7 +451,6 @@ static void write_with_gap(afl_state_t *afl, u8 *mem, u32 len, u32 skip_at,
   } else {
 
     ck_write(fd, mem, skip_at, afl->fsrv.out_file);
-
     ck_write(fd, mem + skip_at + skip_len, tail_len, afl->fsrv.out_file);
 
   }

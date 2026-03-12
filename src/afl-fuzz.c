@@ -2060,6 +2060,11 @@ int main(int argc, char **argv_orig, char **envp) {
   afl_realloc(AFL_BUF_PARAM(out), min_alloc);
   afl_realloc(AFL_BUF_PARAM(eff), min_alloc);
   afl_realloc(AFL_BUF_PARAM(ex), min_alloc);
+  if (afl->fsrv.use_ijon) {
+
+    afl_realloc((void **)&afl->ijon_input_data, min_alloc);
+
+  }
 
   afl->fsrv.use_fauxsrv = afl->non_instrumented_mode == 1 || afl->no_forkserver;
   afl->fsrv.max_length = afl->max_length;
@@ -2968,6 +2973,7 @@ int main(int argc, char **argv_orig, char **envp) {
   if (afl->fsrv.out_file && afl->fsrv.use_shmem_fuzz) {
 
     unlink(afl->fsrv.out_file);
+    if (afl->fsrv.out_file) { ck_free(afl->fsrv.out_file); }
     afl->fsrv.out_file = NULL;
     afl->fsrv.use_stdin = 0;
     close(afl->fsrv.out_fd);
@@ -4003,10 +4009,17 @@ stop_fuzzing:
   ck_free(afl->n_fuzz);
   ck_free(afl->n_fuzz_dup);
   ck_free(afl->simplified_n_fuzz);
+  if (afl->frameshift_index_buffer) { free(afl->frameshift_index_buffer); }
+  if (afl->fs_curr_meta) {
+
+    if (afl->fs_curr_meta->relations) { free(afl->fs_curr_meta->relations); }
+    free(afl->fs_curr_meta);
+
+  }
 
   if (afl->orig_cmdline) { ck_free(afl->orig_cmdline); }
   ck_free(afl->fsrv.target_path);
-  ck_free(afl->fsrv.out_file);
+  if (afl->fsrv.out_file) { ck_free(afl->fsrv.out_file); }
   ck_free(afl->sync_id);
   if (afl->q_testcase_cache) { ck_free(afl->q_testcase_cache); }
   afl_state_deinit(afl);

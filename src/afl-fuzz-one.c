@@ -345,9 +345,10 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
     /* Use IJON input data that was set up in fuzz_one() */
     len = afl->ijon_input_len;
-    in_buf = orig_in = afl->ijon_input_data;
-    out_buf = ck_alloc_nozero(len);
-    memcpy(out_buf, in_buf, len);
+    orig_in = in_buf = afl->in_buf;
+    out_buf = afl->out_buf;
+    memcpy(in_buf, afl->ijon_input_data, len);
+    memcpy(out_buf, afl->ijon_input_data, len);
 
     /* Setup variables for havoc stage */
     temp_len = len;
@@ -2860,13 +2861,14 @@ havoc_stage:
 
           switch_len = choose_block_len(afl, MIN(switch_len, to_end));
 
+          u8 *new_buf = afl_realloc(AFL_BUF_PARAM(out_scratch), switch_len);
+          if (unlikely(!new_buf)) { PFATAL("alloc"); }
+
 #ifdef INTROSPECTION
           snprintf(afl->m_tmp, sizeof(afl->m_tmp), " SWITCH-%s_%u_%u_%u",
                    "switch", switch_from, switch_to, switch_len);
           strcat(afl->mutation, afl->m_tmp);
 #endif
-          u8 *new_buf = afl_realloc(AFL_BUF_PARAM(out_scratch), switch_len);
-          if (unlikely(!new_buf)) { PFATAL("alloc"); }
 
           /* Backup */
 
@@ -6424,7 +6426,7 @@ u8 fuzz_one(afl_state_t *afl) {
 
   /* IJON execution path - variables for file handling */
   u32 len = 0;
-  u8 *in_buf = NULL, *out_buf = NULL, *orig_in = NULL;
+  u8 *orig_in = NULL;
   s32 fd = -1;
 
   /* IJON max tracking: Check if we should use IJON input (80% chance) */
@@ -6438,32 +6440,47 @@ u8 fuzz_one(afl_state_t *afl) {
 
       /* Open IJON input file directly */
       fd = open(ijon_input->filename, O_RDONLY);
+
       if (likely(fd >= 0)) {
 
         len = ijon_input->len;
 
         /* Map the IJON input file */
-        orig_in = in_buf =
-            mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+        orig_in = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
         if (likely(orig_in != MAP_FAILED)) {
 
           close(fd);
+          u8 *out_buf, *in_buf;
 
           /* Allocate output buffer for mutations */
-          out_buf = ck_alloc_nozero(len);
-          memcpy(out_buf, in_buf, len);
+          if ((out_buf = afl_realloc(AFL_BUF_PARAM(out), len)) == NULL) {
 
+            PFATAL("alloc");
+
+          }
+
+          if ((in_buf = afl_realloc(AFL_BUF_PARAM(in), len)) == NULL) {
+
+            PFATAL("alloc");
+
+          }
+
+          if (afl_realloc((void **)&afl->ijon_input_data, len) == NULL) {
+
+            PFATAL("alloc");
+
+          }
+
+          memcpy(out_buf, orig_in, len);
+          memcpy(in_buf, orig_in, len);
           /* Store IJON input data for fuzz_one_original() */
-          if (afl->ijon_input_data) { ck_free(afl->ijon_input_data); }
-          afl->ijon_input_data = ck_alloc(len);
-          memcpy(afl->ijon_input_data, in_buf, len);
+          memcpy(afl->ijon_input_data, orig_in, len);
           afl->ijon_input_len = len;
 
           /* Set IJON execution flag */
           afl->is_doing_ijon = 1;
 
           /* Clean up temporary buffers */
-          ck_free(out_buf);
           munmap(orig_in, len);
 
           /* Call fuzz_one_original - it will handle IJON goto havoc_stage */
@@ -6471,13 +6488,7 @@ u8 fuzz_one(afl_state_t *afl) {
 
           /* Reset IJON flag and cleanup */
           afl->is_doing_ijon = 0;
-          if (afl->ijon_input_data) {
-
-            ck_free(afl->ijon_input_data);
-            afl->ijon_input_data = NULL;
-            afl->ijon_input_len = 0;
-
-          }
+          afl->ijon_input_len = 0;
 
           return result;
 
@@ -6498,16 +6509,8 @@ u8 fuzz_one(afl_state_t *afl) {
 
   }
 
-  /* Clear IJON input data for normal fuzzing */
-  if (unlikely(afl->ijon_input_data)) {
-
-    ck_free(afl->ijon_input_data);
-    afl->ijon_input_data = NULL;
-    afl->ijon_input_len = 0;
-
-  }
-
   /* Reset IJON flag for normal fuzzing */
+  afl->ijon_input_len = 0;
   afl->is_doing_ijon = 0;
 
 #ifdef _AFL_DOCUMENT_MUTATIONS

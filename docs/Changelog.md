@@ -12,6 +12,7 @@
       (on average) it does nothing, at best it improves time to new coverage
       and total coverage unlocked. https://arxiv.org/pdf/2507.05421
       Thanks to @hgarrereyn for the PR!
+    - Fixed several potential crashes when using IJON
     - added `AFL_FORCE_FASTRESUME` which will ignore the saved hash of the
       target - but note it will only work if the coverage map size did not
       change

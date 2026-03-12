@@ -788,6 +788,19 @@ void destroy_queue(afl_state_t *afl) {
 
     }
 
+    if (q->fs_meta) {
+
+      if (q->fs_meta->relations) { free(q->fs_meta->relations); }
+      if (q->fs_meta->blocked_points_map) {
+
+        free(q->fs_meta->blocked_points_map);
+
+      }
+
+      free(q->fs_meta);
+
+    }
+
     ck_free(q);
 
   }
