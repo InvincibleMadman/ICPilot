@@ -4,6 +4,10 @@
   release of the tool. See README.md for the general instruction manual.
 
 
+### Version ++4.41a (dev)
+  - ...
+
+
 ### Version ++4.40c (release)
   - afl-fuzz:
     - FrameShift integrated and enabled by default, disable with
