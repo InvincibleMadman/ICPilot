@@ -12,7 +12,7 @@
                         Dominik Maier <mail@dmnk.co>
 
    Copyright 2016, 2017 Google Inc. All rights reserved.
-   Copyright 2019-2024 AFLplusplus Project. All rights reserved.
+   Copyright 2019-2026 AFLplusplus Project. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -892,6 +892,9 @@ static char **prepare_fsrv(afl_forkserver_t *fsrv, sharedmem_t *shm,
   fsrv->frida_mode = frida_mode;
   fsrv->qemu_mode = qemu_mode;
   fsrv->unicorn_mode = unicorn_mode;
+#ifdef __linux__
+  fsrv->nyx_mode = nyx_mode;
+#endif
 
   afl_fsrv_setup_preload(fsrv, target_bin);
 
@@ -1246,6 +1249,9 @@ static void cmin_detect_map_size(void) {
     fsrv.frida_mode = frida_mode;
     fsrv.qemu_mode = qemu_mode;
     fsrv.unicorn_mode = unicorn_mode;
+#ifdef __linux__
+    fsrv.nyx_mode = nyx_mode;
+#endif
 
     afl_fsrv_setup_preload(&fsrv, target_bin);
     fsrv.target_path = target_bin;
@@ -1840,8 +1846,14 @@ static void test_target_binary(void) {
   afl_forkserver_t fsrv = {0};
   sharedmem_t      shm = {0};
   u8               stop_soon = 0;
+  char           **argv;
 
-  char **argv = prepare_fsrv(&fsrv, &shm, map_size, (u32)-1, NULL);
+#ifdef __linux__
+  if (nyx_mode)
+    argv = prepare_fsrv(&fsrv, &shm, map_size, 0, "%s/.cur_input_%u");
+  else
+#endif
+    argv = prepare_fsrv(&fsrv, &shm, map_size, (u32)-1, NULL);
 
   /* Set up shared-memory test-case delivery; the fork server negotiates
      shmem-fuzz support during the handshake (needed for Frida/QEMU). */

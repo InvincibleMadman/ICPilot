@@ -4,7 +4,7 @@
   release of the tool. See README.md for the general instruction manual.
 
 
-### Version ++4.36a (dev)
+### Version ++4.40c (release)
   - afl-fuzz:
     - FrameShift integrated and enabled by default, disable with
       AFL_FRAMESHIFT_DISABLE and configure effort via
@@ -21,21 +21,25 @@
   - afl-cc:
     - LLVM 22 support (they are again switching around include files ...)
     - g_/curl_/xml_ string support for COMPCOV, thanks to @Prajwal-kp-18
-    - env `AFL_LLVM_DENY_EXEC` will abort any common exec calls
+    - optimized hidden CFG instrumentation (don't instrument vector selects)
+    - plugin optimization and fixes by @nbars, @kyakdan and @koltiradw
     - marked GCC plugins as unmaintained. We need someone who know gimple and
       is willing to fix the plugin issues, workarounds for gcc bugs and
       overall improve the plugin.
-    - optimize hidden CFG instrumentation (don't instrument vector selects)
+    - env `AFL_LLVM_DENY_EXEC` will abort any common exec calls
   - afl-cmin:
     - new implementation in C by @kcwu - it is currenlty not built though
-      because of maturity reasons
+      because of maturity issues, e.g. does not work with Nyx
     - afl-cmin.py was changing behaviour to hash the original filenames,
       this was reverted.
     - afl-cmin and afl-cmin.py honor `AFL_SHA1_FILENAMES` now
   - afl-showmap:
     - -f support added by Prajwal-kp-18 - thanks!
+    - faster stream mode by @nbars
   - qemu_mode:
     - fix when AFL_EXITPOINT is not set, which could prevent detecting crashes
+  - afl-plot:
+    - multiple AFL++ out directories now supported, thanks to @Jay-1409 !
 
 
 ### Version ++4.35a (release)
