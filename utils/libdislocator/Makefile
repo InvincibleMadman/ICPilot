@@ -27,7 +27,7 @@ override CFLAGS += $(CFLAGS_ADD)
 
 SRCS = libdislocator.so.c
 ifeq ($(shell uname), Darwin)
-	SRCS += fishhook.c
+	SRCS += ../macos_fishhook/fishhook.c
 endif
 
 all: libdislocator.so

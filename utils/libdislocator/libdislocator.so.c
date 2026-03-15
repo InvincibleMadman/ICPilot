@@ -32,7 +32,7 @@
 #ifdef __APPLE__
   #include <mach/vm_statistics.h>
   /* fishhook is used and it is from https://github.com/facebook/fishhook */
-  #include "fishhook.h"
+  #include "../macos_fishhook/fishhook.h"
 #endif
 
 #ifdef __FreeBSD__

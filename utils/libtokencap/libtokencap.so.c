@@ -64,7 +64,7 @@
 
 #ifdef __APPLE__
   /* fishhook is used ang its from https://github.com/facebook/fishhook */
-  #include "fishhook.h"
+  #include "../macos_fishhook/fishhook.h"
 #endif
 
 #ifdef RTLD_NEXT

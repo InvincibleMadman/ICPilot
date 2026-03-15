@@ -47,7 +47,7 @@ LDFLAGS     += $(_____OS_DL)
 
 SRCS = libtokencap.so.c
 ifeq ($(shell uname), Darwin)
-	SRCS += fishhook.c
+	SRCS += ../macos_fishhook/fishhook.c
 endif
 
 #ifeq "$(shell uname)" "Linux"
