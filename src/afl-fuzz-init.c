@@ -3160,7 +3160,7 @@ void check_binary(afl_state_t *afl, u8 *fname) {
 
   /* Check for blatant user errors. */
 
-  /*  disabled. not a real-worl scenario where this is a problem.
+  /*  disabled. not a real-world scenario where this is a problem.
     if ((!strncmp(afl->fsrv.target_path, "/tmp/", 5) &&
          !strchr(afl->fsrv.target_path + 5, '/')) ||
         (!strncmp(afl->fsrv.target_path, "/var/tmp/", 9) &&
