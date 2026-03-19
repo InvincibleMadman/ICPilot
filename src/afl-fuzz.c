@@ -308,6 +308,8 @@ static void usage(u8 *argv0, int more_help) {
       "  -T text       - text banner to show on the screen\n"
       "  -I command    - execute this command/script when a new crash is "
       "found\n"
+      "                  (crash file path is passed as the first argument to\n"
+      "                  the command/script)\n"
       //"  -B bitmap.txt - mutate a specific test case, use the
       // out/default/fuzz_bitmap file\n"
       "  -C            - crash exploration mode (the peruvian rabbit thing)\n"

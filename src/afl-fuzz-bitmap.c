@@ -1051,7 +1051,10 @@ may_save_fault:
         // compiler warning either
         // See
         // https://stackoverflow.com/questions/11888594/ignoring-return-values-in-c
-        (void)(system(afl->infoexec) + 1);
+        char infoexec_cmd[PATH_MAX * 2];
+        snprintf(infoexec_cmd, sizeof(infoexec_cmd), "%s \"%s\"", afl->infoexec,
+                 fn);
+        (void)(system(infoexec_cmd) + 1);
 #else
         WARNF("command execution unsupported");
 #endif
