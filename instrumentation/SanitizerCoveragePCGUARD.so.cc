@@ -1372,9 +1372,7 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
             }
 
-          } else
-
-          {
+          } else {
 
             if (!be_quiet) {
 
@@ -1411,8 +1409,6 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
   uint32_t skipped = 0;
 
-  if (AllBlocks.size() < skipped) { abort(); }  // assert
-
   if (!AllBlocks.empty()) {
 
     size_t counter = 0;
@@ -1433,6 +1429,8 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
     }
 
   }
+
+  if (AllBlocks.size() < skipped) { abort(); }  // assert
 
   skippedbb += skipped;
 

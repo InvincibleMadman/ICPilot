@@ -53,7 +53,12 @@ unsigned int calcCyclomaticComplexity(llvm::Function *F) {
     for (Instruction &I : BB) {
 
       // every call is also an edge, so we need to count the calls too
-      if (isa<CallInst>(&I) || isa<InvokeInst>(&I)) { numCalls++; }
+      if (isa<CallInst>(&I) || isa<InvokeInst>(&I)) {
+
+        // TODO: do not increase counter on `llvm.*` calls
+        numCalls++;
+
+      }
 
     }
 
@@ -64,16 +69,14 @@ unsigned int calcCyclomaticComplexity(llvm::Function *F) {
   // Calls are considered to be an edge
   unsigned int CC = 2 + numCalls + numEdges - numBlocks;
 
-  // if (debug) {
-
   fprintf(stderr, "CyclomaticComplexity for %s: %u\n",
           F->getName().str().c_str(), CC);
-
-  //}
 
   return CC;
 
 }
+
+/* Note that the caller needs to free returned value! Currently unused. */
 
 char *getBBName(const llvm::BasicBlock *BB) {
 
@@ -117,6 +120,7 @@ bool isIgnoreFunction(const llvm::Function *F) {
       "__cmplog",
       "__sancov",
       "__san",
+      "__lsan",
       "__cxx_",
       "__decide_deferred",
       "_GLOBAL",
@@ -126,6 +130,7 @@ bool isIgnoreFunction(const llvm::Function *F) {
       "LLVMFuzzerM",
       "LLVMFuzzerC",
       "LLVMFuzzerI",
+      // LLVMFuzzerT(estOneInput is not in this list on purpose!
       "maybe_duplicate_stderr",
       "discard_output",
       "close_stdout",
