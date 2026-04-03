@@ -155,7 +155,6 @@ class ModuleSanitizerCoverageAFL
                                                 Type *Ty);
 
   // Helper functions for cleaner code
-  bool   isInstructionInteresting(Instruction &IN);
   bool   isAflInterestingCall(Instruction &IN);
   void   initializeVersionSpecificTypes(IRBuilder<> &IRB);
   void   setupEnvironmentVariables();
@@ -200,6 +199,7 @@ class ModuleSanitizerCoverageAFL
   ConstantInt    *One = NULL;
   ConstantInt    *Zero = NULL;
   bool            deny_exec = false;
+  uint32_t        first = 1;
 
 };
 
@@ -315,12 +315,6 @@ std::pair<Value *, Value *> ModuleSanitizerCoverageAFL::CreateSecStartEnd(
   return std::make_pair(IRB.CreatePointerCast(GEP, PointerType::getUnqual(Ty)),
                         SecEnd);
 #endif
-
-}
-
-bool ModuleSanitizerCoverageAFL::isInstructionInteresting(Instruction &I) {
-
-  return isAflCovInterestingInstruction(I);
 
 }
 
@@ -512,12 +506,13 @@ void ModuleSanitizerCoverageAFL::updateCoverageForSelect(IRBuilder<> &IRB,
   while (true) {
 
     Value *MapPtrIdx = nullptr;
+    Value *CoverageIndex = nullptr;
 
     if (!vector_cnt) {
 
       LoadInst *CurLoc = IRB.CreateLoad(IRB.getInt32Ty(), result);
       setNoSanitizeMetadata(CurLoc);
-      MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, CurLoc);
+      CoverageIndex = CurLoc;
 
     } else {
 
@@ -525,9 +520,23 @@ void ModuleSanitizerCoverageAFL::updateCoverageForSelect(IRBuilder<> &IRB,
       auto elementptr = IRB.CreateIntToPtr(element, Int32PtrTy);
       auto elementld = IRB.CreateLoad(IRB.getInt32Ty(), elementptr);
       setNoSanitizeMetadata(elementld);
-      MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, elementld);
+      CoverageIndex = elementld;
 
     }
+
+    // Apply IJON state-aware coverage if enabled
+    if (ijon_enabled && AFLIJONState) {
+
+      LoadInst *IJONStateVal = IRB.CreateLoad(Int32Ty, AFLIJONState);
+      setNoSanitizeMetadata(IJONStateVal);
+      Value *XorResult = IRB.CreateXor(IJONStateVal, CoverageIndex);
+      LoadInst *CovMapSize = IRB.CreateLoad(Int32Ty, AFLCovMapSize);
+      setNoSanitizeMetadata(CovMapSize);
+      CoverageIndex = IRB.CreateURem(XorResult, CovMapSize);
+
+    }
+
+    MapPtrIdx = IRB.CreateGEP(Int8Ty, MapPtr, CoverageIndex);
 
     if (use_threadsafe_counters) {
 
@@ -952,7 +961,6 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
   uint32_t cnt_cov = 0, cnt_sel = 0, cnt_sel_inc = 0, skip_blocks = 0,
            cnt_special = 0;
-  static uint32_t first = 1;
 
   for (auto &BB : F) {
 
@@ -999,7 +1007,7 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
       }
 
-      bool instrumentInst = isInstructionInteresting(IN);
+      bool instrumentInst = isAflCovInterestingInstruction(IN);
 
       if (instrumentInst) {
 
@@ -1072,6 +1080,14 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
               cnt_sel_inc += (tt->getElementCount().getKnownMinValue() * 2);
 
             }
+
+          } else if (t->getTypeID() == llvm::Type::ScalableVectorTyID) {
+
+            // Scalable vectors (SVE/RISC-V V): we OR-reduce to scalar i1
+            // at instrumentation time, so only 2 guard slots needed.
+            block_is_instrumented = true;
+            cnt_sel++;
+            cnt_sel_inc += 2;
 
           } else {
 
@@ -1201,7 +1217,7 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
       // printDebugInfo(IN);
 
       // Check if we should instrument this instruction for coverage
-      bool instrumentInst = isInstructionInteresting(IN);
+      bool instrumentInst = isAflCovInterestingInstruction(IN);
 
       if (instrumentInst) {
 
@@ -1262,10 +1278,10 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
 
           if (debug) printDebugInfo(IN);
 
-          Value      *pair = cxchg;
-          IRBuilder<> IRB(cxchg->getNextNode());
-          Value      *extracted = IRB.CreateExtractValue(pair, 1);
-          Value      *res = IRB.CreateFreeze(extracted);
+          Value *pair = cxchg;
+          IRB.SetInsertPoint(cxchg->getNextNode());
+          Value *extracted = IRB.CreateExtractValue(pair, 1);
+          Value *res = IRB.CreateFreeze(extracted);
           setNoInstrumentMetadata(res);
           Value *GuardPtr1 =
               createGuardPointer(IRB, cnt_cov + special + local_selects++ +
@@ -1284,8 +1300,8 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
               Op != AtomicRMWInst::UMin && Op != AtomicRMWInst::UMax)
             continue;
 
-          IRBuilder<> IRB(rmw->getNextNode());
-          Value      *OldVal = rmw;  // result of atomicrmw: old value
+          IRB.SetInsertPoint(rmw->getNextNode());
+          Value *OldVal = rmw;  // result of atomicrmw: old value
           Value *NewVal = rmw->getValOperand();  // value passed to atomicrmw
 
           if (OldVal->getType() != NewVal->getType()) {
@@ -1371,6 +1387,26 @@ bool ModuleSanitizerCoverageAFL::InjectCoverage(
               setNoInstrumentMetadata(result);
 
             }
+
+          } else
+
+              if (t->getTypeID() == llvm::Type::ScalableVectorTyID) {
+
+            // Scalable vectors (SVE/RISC-V V): OR-reduce to scalar i1
+            // since we cannot create a compile-time-fixed number of guard
+            // pointers for a runtime-variable vector length.
+            Value *frozen_cond = IRB.CreateFreeze(condition);
+            setNoInstrumentMetadata(frozen_cond);
+            Value *reduced = IRB.CreateOrReduce(frozen_cond);
+            setNoInstrumentMetadata(reduced);
+            Value *GuardPtr1 =
+                createGuardPointer(IRB, cnt_cov + special + local_selects++ +
+                                            AllBlocks.size() - skip_blocks);
+            Value *GuardPtr2 =
+                createGuardPointer(IRB, cnt_cov + special + local_selects++ +
+                                            AllBlocks.size() - skip_blocks);
+            result = IRB.CreateSelect(reduced, GuardPtr1, GuardPtr2);
+            setNoInstrumentMetadata(result);
 
           } else {
 

@@ -55,7 +55,18 @@ unsigned int calcCyclomaticComplexity(llvm::Function *F) {
       // every call is also an edge, so we need to count the calls too
       if (isa<CallInst>(&I) || isa<InvokeInst>(&I)) {
 
-        // TODO: do not increase counter on `llvm.*` calls
+        // Do not count llvm.* intrinsics (dbg, lifetime, etc.) as edges —
+        // they are not real control-flow transfers.
+        if (auto *CB = dyn_cast<CallBase>(&I)) {
+
+          if (Function *Callee = CB->getCalledFunction()) {
+
+            if (Callee->isIntrinsic()) continue;
+
+          }
+
+        }
+
         numCalls++;
 
       }
