@@ -686,6 +686,10 @@ typedef struct afl_state {
 
   double *alias_probability;            /* alias weighted probabilities     */
   u32    *alias_table;                /* alias weighted random lookup table */
+  u32     alias_map_size;             /* allocated capacity of alias arrays */
+  u32    *splice_buf_ids;             /* pre-filtered splice candidate IDs  */
+  u32     splice_buf_count;           /* number of splice candidates        */
+  u32     splice_buf_alloc;           /* allocated capacity of splice_buf   */
   u32     active_items;                 /* enabled entries in the queue     */
 
   u8 *var_bytes;                        /* Bytes that appear to be variable */
@@ -962,6 +966,8 @@ typedef struct afl_state {
   time_t          last_ijon_log_time;   /* Rate limiting for IJON UI output */
   u8             *ijon_input_data;    /* Currently executed IJON input data */
   u32             ijon_input_len; /* Length of currently executed IJON input */
+  u8             *ijon_cur_input; /* current input buf passed to IJON check */
+  u32             ijon_cur_input_len; /* length of ijon_cur_input            */
   u8              is_doing_ijon;      /* Flag to track IJON execution state */
   dynamic_shared_access_t
       *ijon_shared_access;         /* IJON shared access for dynamic offset */

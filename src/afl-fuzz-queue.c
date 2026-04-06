@@ -27,9 +27,6 @@
 #include <ctype.h>
 #include <math.h>
 
-static double *alias_probability;
-static u32    *alias_table, map_items;
-
 #ifdef _STANDALONE_MODULE
 void minimize_bits(afl_state_t *afl, u8 *dst, u8 *src) {
 
@@ -59,7 +56,7 @@ inline u32 select_next_queue_entry(afl_state_t *afl) {
   alias_probability[s] ? s : alias_table[s]);
   */
 
-  return (p < alias_probability[s] ? s : alias_table[s]);
+  return (p < afl->alias_probability[s] ? s : afl->alias_table[s]);
 
 }
 
@@ -70,28 +67,28 @@ void create_alias_table(afl_state_t *afl) {
   u32    n = afl->queued_items, i = 0, nSmall = 0, nLarge = n - 1;
   double sum = 0;
 
-  if (likely(alias_table)) {
+  if (likely(afl->alias_table)) {
 
-    if (likely(n > map_items)) {
+    if (likely(n > afl->alias_map_size)) {
 
-      free(alias_table);
-      alias_table = malloc(n * sizeof(u32));
-      free(alias_probability);
-      alias_probability = (double *)malloc(n * sizeof(double));
-      map_items = afl->queued_items;
+      free(afl->alias_table);
+      afl->alias_table = malloc(n * sizeof(u32));
+      free(afl->alias_probability);
+      afl->alias_probability = (double *)malloc(n * sizeof(double));
+      afl->alias_map_size = afl->queued_items;
 
     } else {
 
-      memset((void *)alias_table, 0, n * sizeof(u32));
-      memset((void *)alias_probability, 0, n * sizeof(double));
+      memset((void *)afl->alias_table, 0, n * sizeof(u32));
+      memset((void *)afl->alias_probability, 0, n * sizeof(double));
 
     }
 
   } else {
 
-    alias_table = malloc(n * sizeof(u32));
-    alias_probability = (double *)malloc(n * sizeof(double));
-    map_items = afl->queued_items;
+    afl->alias_table = malloc(n * sizeof(u32));
+    afl->alias_probability = (double *)malloc(n * sizeof(double));
+    afl->alias_map_size = afl->queued_items;
 
   }
 
@@ -99,7 +96,8 @@ void create_alias_table(afl_state_t *afl) {
   u32    *Small = (u32 *)malloc(n * sizeof(u32));
   u32    *Large = (u32 *)malloc(n * sizeof(u32));
 
-  if (unlikely(!P || !Small || !Large || !alias_table || !alias_probability)) {
+  if (unlikely(!P || !Small || !Large || !afl->alias_table ||
+               !afl->alias_probability)) {
 
     FATAL("could not acquire memory for alias table");
 
@@ -380,8 +378,8 @@ void create_alias_table(afl_state_t *afl) {
     u32 small = Small[--nSmall];
     u32 large = Large[++nLarge];
 
-    alias_probability[small] = P[small];
-    alias_table[small] = large;
+    afl->alias_probability[small] = P[small];
+    afl->alias_table[small] = large;
 
     P[large] = P[large] - (1 - P[small]);
 
@@ -399,13 +397,13 @@ void create_alias_table(afl_state_t *afl) {
 
   while (nSmall) {
 
-    alias_probability[Small[--nSmall]] = 1;
+    afl->alias_probability[Small[--nSmall]] = 1;
 
   }
 
   while (nLarge != n - 1) {
 
-    alias_probability[Large[++nLarge]] = 1;
+    afl->alias_probability[Large[++nLarge]] = 1;
 
   }
 
@@ -754,6 +752,22 @@ void add_to_queue(afl_state_t *afl, u8 *fname, u32 len, u8 passed_det) {
   queue_buf[afl->queued_items - 1] = q;
   q->id = afl->queued_items - 1;
 
+  if (likely(q->len > 3)) {
+
+    if (unlikely(afl->splice_buf_count >= afl->splice_buf_alloc)) {
+
+      u32 new_alloc = afl->splice_buf_alloc ? afl->splice_buf_alloc * 2 : 64;
+      afl->splice_buf_ids =
+          realloc(afl->splice_buf_ids, new_alloc * sizeof(u32));
+      if (unlikely(!afl->splice_buf_ids)) { PFATAL("alloc splice_buf"); }
+      afl->splice_buf_alloc = new_alloc;
+
+    }
+
+    afl->splice_buf_ids[afl->splice_buf_count++] = q->id;
+
+  }
+
   u64 cur_time = get_cur_time();
 
   if (likely(afl->start_time) &&
@@ -1082,21 +1096,28 @@ void recalculate_all_scores(afl_state_t *afl) {
 
           if (!candidate_ids) {
 
-            // first candidate: [count][id]
-            candidate_ids = ck_alloc(sizeof(u32) * 2);
+            /* format: [count][cap][id0][id1...] */
+            candidate_ids = ck_alloc(sizeof(u32) * 4);
             candidate_ids[0] = 1;   // count = 1
-            candidate_ids[1] = id;  // first ID
+            candidate_ids[1] = 2;   // capacity = 2
+            candidate_ids[2] = id;  // first ID
 
           } else {
 
             u32 count = candidate_ids[0];
+            u32 cap = candidate_ids[1];
 
-            candidate_ids =
-                ck_realloc(candidate_ids, sizeof(u32) * (count + 2));
+            if (unlikely(count == cap)) {
+
+              u32 new_cap = cap * 2;
+              candidate_ids =
+                  ck_realloc(candidate_ids, sizeof(u32) * (new_cap + 2));
+              candidate_ids[1] = new_cap;
+
+            }
+
             candidate_ids[0] = count + 1;   // increment the count
-            candidate_ids[count + 1] = id;  // append the new ID to the end
-
-            // fprintf(stderr, "enroll candidate[%u][%u] %u\n", i, j, id);
+            candidate_ids[count + 2] = id;  // append the new ID
 
           }
 
@@ -1121,7 +1142,7 @@ void recalculate_all_scores(afl_state_t *afl) {
 
       for (u32 k = 0; k < count; k++) {
 
-        u32                 id = candidate_ids[k + 1];
+        u32                 id = candidate_ids[k + 2];
         struct queue_entry *entry = afl->queue_buf[id];
         update_bitmap_rescore(afl, entry, i);
 

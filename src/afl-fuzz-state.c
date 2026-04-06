@@ -942,8 +942,9 @@ void afl_state_deinit(afl_state_t *afl) {
   afl_free(afl->in_buf);
   afl_free(afl->in_scratch_buf);
   afl_free(afl->ex_buf);
-  afl_free(afl->alias_table);
-  afl_free(afl->alias_probability);
+  free(afl->alias_table);
+  free(afl->alias_probability);
+  free(afl->splice_buf_ids);
   if (afl->testcase_buf) { afl_free(afl->testcase_buf); }
   if (afl->splicecase_buf) { afl_free(afl->splicecase_buf); }
 
