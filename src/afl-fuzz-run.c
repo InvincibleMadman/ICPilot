@@ -863,7 +863,7 @@ void check_sync_fuzzers(afl_state_t *afl) {
 
     afl->is_main_node = 1;
     sprintf(qd_path, "%s/is_main_node", afl->out_dir);
-    int id_fd = open(qd_main_path, O_RDWR | O_CREAT, afl->perm);
+    int id_fd = open(qd_path, O_RDWR | O_CREAT, afl->perm);
     if (id_fd >= 0) { close(id_fd); }
 
   }
@@ -1373,7 +1373,7 @@ u8 trim_case(afl_state_t *afl, struct queue_entry *q, u8 *in_buf) {
       u32 written = 0;
       while (written < q->len) {
 
-        ssize_t result = write(fd, in_buf, q->len - written);
+        ssize_t result = write(fd, in_buf + written, q->len - written);
         if (result > 0) written += result;
 
       }
