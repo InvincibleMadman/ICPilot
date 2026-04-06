@@ -7,6 +7,8 @@
 ### Version ++4.41a (dev)
   - afl-fuzz:
     - `-I tool` call now receives the new crash as a command line parameter
+    - changed to a better map classifier
+    - minor speed, leak and zombie enhancements
   - afl-cc:
     - Fixes in the PCGUARD and LTO instrumentation that could lead to sanitizer
       triggers in target binaries
