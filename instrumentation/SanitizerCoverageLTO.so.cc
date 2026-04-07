@@ -702,6 +702,8 @@ bool ModuleSanitizerCoverageLTO::instrumentModule(
             bool   isStrncasecmp = true;
             bool   isIntMemcpy = true;
             bool   isStdString = true;
+            bool   isStrstr = true;
+            bool   isGStrstrLen = true;
             size_t optLen = 0;
 
             Function *Callee = callInst->getCalledFunction();
@@ -750,6 +752,12 @@ bool ModuleSanitizerCoverageLTO::instrumentModule(
                   FuncName.find("compare") != std::string::npos) ||
                  (FuncName.find("basic_string") != std::string::npos &&
                   FuncName.find("find") != std::string::npos));
+            isStrstr &= (!FuncName.compare("strstr") ||
+                         !FuncName.compare("strcasestr") ||
+                         !FuncName.compare("ap_strcasestr") ||
+                         !FuncName.compare("xmlStrstr") ||
+                         !FuncName.compare("xmlStrcasestr"));
+            isGStrstrLen &= !FuncName.compare("g_strstr_len");
 
             /* we do something different here, putting this BB and the
                successors in a block map */
@@ -767,11 +775,12 @@ bool ModuleSanitizerCoverageLTO::instrumentModule(
             }
 
             if (!isStrcmp && !isMemcmp && !isStrncmp && !isStrcasecmp &&
-                !isStrncasecmp && !isIntMemcpy && !isStdString)
+                !isStrncasecmp && !isIntMemcpy && !isStdString && !isStrstr &&
+                !isGStrstrLen)
               continue;
 
-            /* Verify the strcmp/memcmp/strncmp/strcasecmp/strncasecmp function
-             * prototype */
+            /* Verify the strcmp/memcmp/strncmp/strcasecmp/strncasecmp/strstr
+             * function prototype */
             FunctionType *FT = Callee->getFunctionType();
 
             isStrcmp &= FT->getNumParams() == 2 &&
@@ -824,17 +833,32 @@ bool ModuleSanitizerCoverageLTO::instrumentModule(
             isStdString &= FT->getNumParams() >= 2 &&
                            FT->getParamType(0)->isPointerTy() &&
                            FT->getParamType(1)->isPointerTy();
+            isStrstr &= FT->getNumParams() == 2 &&
+                        FT->getReturnType()->isPointerTy() &&
+                        FT->getParamType(0)->isPointerTy() &&
+                        FT->getParamType(1)->isPointerTy();
+            // g_strstr_len: gchar* (const gchar *haystack, gssize haystack_len,
+            //                       const gchar *needle)
+            isGStrstrLen &= FT->getNumParams() == 3 &&
+                            FT->getReturnType()->isPointerTy() &&
+                            FT->getParamType(0)->isPointerTy() &&
+                            FT->getParamType(1)->isIntegerTy() &&
+                            FT->getParamType(2)->isPointerTy();
 
             if (!isStrcmp && !isMemcmp && !isStrncmp && !isStrcasecmp &&
-                !isStrncasecmp && !isIntMemcpy && !isStdString)
+                !isStrncasecmp && !isIntMemcpy && !isStdString && !isStrstr &&
+                !isGStrstrLen)
               continue;
 
-            /* is a str{n,}{case,}cmp/memcmp, check if we have
+            /* is a str{n,}{case,}cmp/memcmp/strstr, check if we have
              * str{case,}cmp(x, "const") or str{case,}cmp("const", x)
              * strn{case,}cmp(x, "const", ..) or strn{case,}cmp("const", x, ..)
-             * memcmp(x, "const", ..) or memcmp("const", x, ..) */
+             * memcmp(x, "const", ..) or memcmp("const", x, ..)
+             * strstr(x, "const") or g_strstr_len(x, len, "const") */
             Value *Str1P = callInst->getArgOperand(0),
-                  *Str2P = callInst->getArgOperand(1);
+                  // g_strstr_len needle is arg2; all others use arg1
+                *Str2P = isGStrstrLen ? callInst->getArgOperand(2)
+                                      : callInst->getArgOperand(1);
             std::string Str1, Str2;
             StringRef   TmpStr;
             bool        HasStr1 = getConstantStringInfo(Str1P, TmpStr);
