@@ -28,6 +28,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #ifdef __APPLE__
   #include <mach/vm_statistics.h>
@@ -92,9 +93,11 @@ typedef struct {
 
 #define ALLOC_ALIGN_SIZE (_Alignof(max_align_t))
 
-#ifndef PAGE_SIZE
-  #define PAGE_SIZE 4096
-#endif                                                        /* !PAGE_SIZE */
+#ifdef PAGE_SIZE
+  #undef PAGE_SIZE
+#endif
+static size_t cached_page_size = 4096;
+#define PAGE_SIZE cached_page_size
 
 #ifndef MAP_ANONYMOUS
   #define MAP_ANONYMOUS MAP_ANON
@@ -562,6 +565,8 @@ size_t malloc_good_size(size_t len) {
 #endif
 
 __attribute__((constructor)) void __dislocator_init(void) {
+
+  cached_page_size = sysconf(_SC_PAGESIZE);
 
   char *tmp = getenv("AFL_LD_LIMIT_MB");
 
