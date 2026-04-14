@@ -9,6 +9,7 @@
     - `-I tool` call now receives the new crash as a command line parameter
     - changed to a better map classifier
     - minor speed, leak and zombie enhancements
+    - somewhere we removed .state/variable/... now it is back :-)
   - afl-cc:
     - Fixes in the PCGUARD and LTO instrumentation that could lead to sanitizer
       triggers in target binaries

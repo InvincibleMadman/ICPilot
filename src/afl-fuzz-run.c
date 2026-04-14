@@ -728,7 +728,7 @@ abort_calibration:
 
     if (!q->var_behavior) { ++afl->queued_variable; }
 
-    q->var_behavior = 1;
+    mark_as_variable(afl, q);
 
   }
 
