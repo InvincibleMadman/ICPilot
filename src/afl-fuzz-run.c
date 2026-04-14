@@ -728,6 +728,8 @@ abort_calibration:
 
     if (!q->var_behavior) { ++afl->queued_variable; }
 
+    q->var_behavior = 1;
+
   }
 
   afl->stage_name = old_sn;
