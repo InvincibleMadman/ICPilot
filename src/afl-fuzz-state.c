@@ -171,6 +171,13 @@ void afl_resize_map_buffers(afl_state_t *afl, u32 old_size, u32 new_size) {
   afl->virgin_crash = ck_realloc(afl->virgin_crash, new_size);
   afl->var_bytes = ck_realloc(afl->var_bytes, new_size);
   afl->top_rated = ck_realloc(afl->top_rated, new_size * sizeof(void *));
+  if (afl->cycle_schedules && afl->top_rated_candidates) {
+
+    afl->top_rated_candidates =
+        ck_realloc(afl->top_rated_candidates, new_size * sizeof(u32 *));
+
+  }
+
   afl->clean_trace = ck_realloc(afl->clean_trace, new_size);
   afl->clean_trace_custom = ck_realloc(afl->clean_trace_custom, new_size);
   afl->first_trace = ck_realloc(afl->first_trace, new_size);
@@ -182,6 +189,13 @@ void afl_resize_map_buffers(afl_state_t *afl, u32 old_size, u32 new_size) {
 
     memset(afl->var_bytes + old_size, 0, size_diff);
     memset(afl->top_rated + old_size, 0, size_diff * sizeof(void *));
+    if (afl->cycle_schedules && afl->top_rated_candidates) {
+
+      memset(afl->top_rated_candidates + old_size, 0,
+             size_diff * sizeof(u32 *));
+
+    }
+
     memset(afl->clean_trace + old_size, 0, size_diff);
     memset(afl->clean_trace_custom + old_size, 0, size_diff);
     memset(afl->first_trace + old_size, 0, size_diff);

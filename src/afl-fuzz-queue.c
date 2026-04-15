@@ -478,6 +478,36 @@ void mark_as_det_done(afl_state_t *afl, struct queue_entry *q) {
 
 }
 
+/* Mark variable behavior for a particular queue entry. We use the .state file
+   to preserve the flag across resume and queue pivoting. */
+
+void mark_as_variable(afl_state_t *afl, struct queue_entry *q) {
+
+  char fn[PATH_MAX];
+  s32  fd;
+
+  snprintf(fn, PATH_MAX, "%s/queue/.state/variable/%s", afl->out_dir,
+           strrchr((char *)q->fname, '/') + 1);
+
+  fd = open(fn, O_WRONLY | O_CREAT | O_EXCL, afl->perm);
+  if (fd < 0 && errno != EEXIST) { PFATAL("Unable to create '%s'", fn); }
+
+  if (fd >= 0) {
+
+    if (afl->chown_needed) {
+
+      if (fchown(fd, -1, afl->fsrv.gid) == -1) { PFATAL("fchown() failed"); }
+
+    }
+
+    close(fd);
+
+  }
+
+  q->var_behavior = 1;
+
+}
+
 /* Mark / unmark as redundant (edge-only). This is not used for restoring state,
    but may be useful for post-processing datasets. */
 
@@ -1560,9 +1590,18 @@ inline void queue_testcase_retake(afl_state_t *afl, struct queue_entry *q,
 
     // only realloc if necessary or useful
     // (a custom trim can make the testcase larger)
-    if (unlikely(len > old_len || len + 1024 < old_len)) {
+    if (unlikely(len > old_len || len + 4096 < old_len)) {
 
-      afl->q_testcase_cache_size += len - old_len;
+      if (len >= old_len) {
+
+        afl->q_testcase_cache_size += len - old_len;
+
+      } else {
+
+        afl->q_testcase_cache_size -= old_len - len;
+
+      }
+
       q->testcase_buf = (u8 *)realloc(q->testcase_buf, len);
 
       if (unlikely(!q->testcase_buf)) {
@@ -1594,14 +1633,14 @@ inline void queue_testcase_retake_mem(afl_state_t *afl, struct queue_entry *q,
     if (likely(in != q->testcase_buf)) {
 
       // only realloc if we save memory
-      if (unlikely(len + 1024 < old_len)) {
+      if (unlikely(len + 4096 < old_len)) {
 
         u8 *ptr = (u8 *)realloc(q->testcase_buf, len);
 
         if (likely(ptr)) {
 
           q->testcase_buf = ptr;
-          afl->q_testcase_cache_size += len - old_len;
+          afl->q_testcase_cache_size -= old_len - len;
 
         }
 

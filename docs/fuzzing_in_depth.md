@@ -975,7 +975,7 @@ too long for your overall available fuzz run time.
       saturated corpus needs to be loaded.
     * `AFL_CMPLOG_ONLY_NEW` - only perform cmplog on new finds, not the initial
       corpus as this very likely has been done for them already.
-    * If you do not like surprises then set `AFL_PIZZA_MODE`
+    * If you do not like surprises then set `AFL_PIZZA_MODE=-1`
     * Keep the generated corpus, use afl-cmin and reuse it every time!
 
 2. Additionally randomize the AFL++ compilation options, e.g.:

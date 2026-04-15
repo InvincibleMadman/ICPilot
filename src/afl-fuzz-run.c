@@ -728,6 +728,8 @@ abort_calibration:
 
     if (!q->var_behavior) { ++afl->queued_variable; }
 
+    mark_as_variable(afl, q);
+
   }
 
   afl->stage_name = old_sn;
@@ -1371,7 +1373,18 @@ u8 trim_case(afl_state_t *afl, struct queue_entry *q, u8 *in_buf) {
       while (written < q->len) {
 
         ssize_t result = write(fd, in_buf + written, q->len - written);
-        if (result > 0) written += result;
+        if (likely(result > 0)) {
+
+          written += result;
+          continue;
+
+        }
+
+        if (!result) { FATAL("Short write to '%s'", q->fname); }
+
+        if (errno == EINTR) { continue; }
+
+        PFATAL("Unable to write '%s'", q->fname);
 
       }
 
