@@ -1994,13 +1994,28 @@ custom_mutator_stage:
             /* Pick a random other queue entry for passing to external API
                that has the necessary length */
 
-            do {
+            if (likely(afl->splice_buf_count > 1)) {
 
-              tid = rand_below(afl, afl->queued_items);
+              u32 tidx = rand_below(afl, afl->splice_buf_count);
+              tid = afl->splice_buf_ids[tidx];
+              if (unlikely(tid == afl->current_entry)) {
 
-            } while (unlikely(tid == afl->current_entry ||
+                tidx = (tidx + 1) % afl->splice_buf_count;
+                tid = afl->splice_buf_ids[tidx];
 
-                              afl->queue_buf[tid]->len < 4));
+              }
+
+            } else {
+
+              do {
+
+                tid = rand_below(afl, afl->queued_items);
+
+              } while (unlikely(tid == afl->current_entry ||
+
+                                afl->queue_buf[tid]->len < 4));
+
+            }
 
             target = afl->queue_buf[tid];
             afl->splicing_with = tid;
@@ -3376,13 +3391,28 @@ havoc_stage:
           /* Pick a random queue entry and seek to it. */
 
           u32 tid;
-          do {
+          if (likely(afl->splice_buf_count > 1)) {
 
-            tid = rand_below(afl, afl->queued_items);
+            u32 tidx = rand_below(afl, afl->splice_buf_count);
+            tid = afl->splice_buf_ids[tidx];
+            if (unlikely(tid == afl->current_entry)) {
 
-          } while (unlikely(tid == afl->current_entry ||
+              tidx = (tidx + 1) % afl->splice_buf_count;
+              tid = afl->splice_buf_ids[tidx];
 
-                            afl->queue_buf[tid]->len < 4));
+            }
+
+          } else {
+
+            do {
+
+              tid = rand_below(afl, afl->queued_items);
+
+            } while (unlikely(tid == afl->current_entry ||
+
+                              afl->queue_buf[tid]->len < 4));
+
+          }
 
           /* Get the testcase for splicing. */
           struct queue_entry *target = afl->queue_buf[tid];
@@ -3428,13 +3458,28 @@ havoc_stage:
           /* Pick a random queue entry and seek to it. */
 
           u32 tid;
-          do {
+          if (likely(afl->splice_buf_count > 1)) {
 
-            tid = rand_below(afl, afl->queued_items);
+            u32 tidx = rand_below(afl, afl->splice_buf_count);
+            tid = afl->splice_buf_ids[tidx];
+            if (unlikely(tid == afl->current_entry)) {
 
-          } while (unlikely(tid == afl->current_entry ||
+              tidx = (tidx + 1) % afl->splice_buf_count;
+              tid = afl->splice_buf_ids[tidx];
 
-                            afl->queue_buf[tid]->len < 4));
+            }
+
+          } else {
+
+            do {
+
+              tid = rand_below(afl, afl->queued_items);
+
+            } while (unlikely(tid == afl->current_entry ||
+
+                              afl->queue_buf[tid]->len < 4));
+
+          }
 
           /* Get the testcase for splicing. */
           struct queue_entry *target = afl->queue_buf[tid];
@@ -3591,13 +3636,28 @@ retry_splicing:
 
     /* Pick a random queue entry and seek to it. Don't splice with yourself. */
 
-    do {
+    if (likely(afl->splice_buf_count > 1)) {
 
-      tid = rand_below(afl, afl->queued_items);
+      u32 tidx = rand_below(afl, afl->splice_buf_count);
+      tid = afl->splice_buf_ids[tidx];
+      if (unlikely(tid == afl->current_entry)) {
 
-    } while (
+        tidx = (tidx + 1) % afl->splice_buf_count;
+        tid = afl->splice_buf_ids[tidx];
 
-        unlikely(tid == afl->current_entry || afl->queue_buf[tid]->len < 4));
+      }
+
+    } else {
+
+      do {
+
+        tid = rand_below(afl, afl->queued_items);
+
+      } while (
+
+          unlikely(tid == afl->current_entry || afl->queue_buf[tid]->len < 4));
+
+    }
 
     /* Get the testcase */
     afl->splicing_with = tid;
@@ -5876,13 +5936,28 @@ pacemaker_fuzzing:
                 if (unlikely(afl->ready_for_splicing_count < 2)) break;
 
                 u32 tid;
-                do {
+                if (likely(afl->splice_buf_count > 1)) {
 
-                  tid = rand_below(afl, afl->queued_items);
+                  u32 tidx = rand_below(afl, afl->splice_buf_count);
+                  tid = afl->splice_buf_ids[tidx];
+                  if (unlikely(tid == afl->current_entry)) {
 
-                } while (tid == afl->current_entry ||
+                    tidx = (tidx + 1) % afl->splice_buf_count;
+                    tid = afl->splice_buf_ids[tidx];
 
-                         afl->queue_buf[tid]->len < 4);
+                  }
+
+                } else {
+
+                  do {
+
+                    tid = rand_below(afl, afl->queued_items);
+
+                  } while (tid == afl->current_entry ||
+
+                           afl->queue_buf[tid]->len < 4);
+
+                }
 
                 /* Get the testcase for splicing. */
                 struct queue_entry *target = afl->queue_buf[tid];
@@ -6085,11 +6160,26 @@ pacemaker_fuzzing:
         /* Pick a random queue entry and seek to it. Don't splice with yourself.
          */
 
-        do {
+        if (likely(afl->splice_buf_count > 1)) {
 
-          tid = rand_below(afl, afl->queued_items);
+          u32 tidx = rand_below(afl, afl->splice_buf_count);
+          tid = afl->splice_buf_ids[tidx];
+          if (unlikely(tid == afl->current_entry)) {
 
-        } while (tid == afl->current_entry || afl->queue_buf[tid]->len < 4);
+            tidx = (tidx + 1) % afl->splice_buf_count;
+            tid = afl->splice_buf_ids[tidx];
+
+          }
+
+        } else {
+
+          do {
+
+            tid = rand_below(afl, afl->queued_items);
+
+          } while (tid == afl->current_entry || afl->queue_buf[tid]->len < 4);
+
+        }
 
         afl->splicing_with = tid;
         target = afl->queue_buf[tid];

@@ -38,9 +38,6 @@
 #include "cmplog.h"
 #include "asanfuzz.h"
 
-static u8 *input_data;
-static u32 input_len;
-
 #ifdef PROFILING
 u64 time_spent_working = 0;
 #endif
@@ -111,11 +108,11 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
 
     /* UNIFIED SHARED MEMORY ACCESS: Always use dynamic allocation */
 
-    if (likely(input_data && input_len)) {
+    if (likely(afl->ijon_cur_input && afl->ijon_cur_input_len)) {
 
       /* Use pre-initialized shared_access from afl state */
       ijon_update_max_dynamic(afl->ijon_state, afl->ijon_shared_access,
-                              input_data, input_len);
+                              afl->ijon_cur_input, afl->ijon_cur_input_len);
 
     }
 
@@ -272,8 +269,8 @@ u32 __attribute__((hot)) write_to_testcase(afl_state_t *afl, void **mem,
 
   if (unlikely(afl->ijon_bits)) {
 
-    input_data = *mem;
-    input_len = len;
+    afl->ijon_cur_input = *mem;
+    afl->ijon_cur_input_len = len;
 
   }
 
@@ -731,6 +728,8 @@ abort_calibration:
 
     if (!q->var_behavior) { ++afl->queued_variable; }
 
+    mark_as_variable(afl, q);
+
   }
 
   afl->stage_name = old_sn;
@@ -863,7 +862,7 @@ void check_sync_fuzzers(afl_state_t *afl) {
 
     afl->is_main_node = 1;
     sprintf(qd_path, "%s/is_main_node", afl->out_dir);
-    int id_fd = open(qd_main_path, O_RDWR | O_CREAT, afl->perm);
+    int id_fd = open(qd_path, O_RDWR | O_CREAT, afl->perm);
     if (id_fd >= 0) { close(id_fd); }
 
   }
@@ -1373,8 +1372,19 @@ u8 trim_case(afl_state_t *afl, struct queue_entry *q, u8 *in_buf) {
       u32 written = 0;
       while (written < q->len) {
 
-        ssize_t result = write(fd, in_buf, q->len - written);
-        if (result > 0) written += result;
+        ssize_t result = write(fd, in_buf + written, q->len - written);
+        if (likely(result > 0)) {
+
+          written += result;
+          continue;
+
+        }
+
+        if (!result) { FATAL("Short write to '%s'", q->fname); }
+
+        if (errno == EINTR) { continue; }
+
+        PFATAL("Unable to write '%s'", q->fname);
 
       }
 

@@ -47,15 +47,28 @@ static const u8 simplify_lookup[256] = {
 
 static const u8 count_class_lookup8[256] = {
 
+    // NEW
     [0] = 0,
     [1] = 1,
-    [2] = 2,
-    [3] = 4,
-    [4 ... 7] = 8,
-    [8 ... 15] = 16,
-    [16 ... 31] = 32,
-    [32 ... 127] = 64,
+    [2 ... 3] = 2,
+    [4 ... 7] = 4,
+    [8 ... 15] = 8,
+    [16 ... 31] = 16,
+    [32 ... 63] = 32,
+    [64 ... 127] = 64,
     [128 ... 255] = 128
+
+    /* OLD
+        [0] = 0,
+        [1] = 1,
+        [2] = 2,
+        [3] = 4,
+        [4 ... 7] = 8,
+        [8 ... 15] = 16,
+        [16 ... 31] = 32,
+        [32 ... 127] = 64,
+        [128 ... 255] = 128
+    */
 
 };
 
@@ -1051,7 +1064,10 @@ may_save_fault:
         // compiler warning either
         // See
         // https://stackoverflow.com/questions/11888594/ignoring-return-values-in-c
-        (void)(system(afl->infoexec) + 1);
+        char infoexec_cmd[PATH_MAX * 2];
+        snprintf(infoexec_cmd, sizeof(infoexec_cmd), "%s \"%s\"", afl->infoexec,
+                 fn);
+        (void)(system(infoexec_cmd) + 1);
 #else
         WARNF("command execution unsupported");
 #endif

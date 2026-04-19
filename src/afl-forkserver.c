@@ -56,6 +56,7 @@
 
 #ifdef __linux__
   #include <dlfcn.h>
+  #include <sys/prctl.h>
 
 /* function to load nyx_helper function from libnyx.so */
 
@@ -522,6 +523,10 @@ static void afl_fauxsrv_execv(afl_forkserver_t *fsrv, char **argv) {
     /* In child process: close fds, resume execution. */
 
     if (!child_pid) {  // New child
+
+#ifdef __linux__
+      prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
 
       if (fsrv->out_dir_fd >= 0) close(fsrv->out_dir_fd);
       if (fsrv->dev_null_fd >= 0) close(fsrv->dev_null_fd);
@@ -1001,6 +1006,10 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
   if (!fsrv->fsrv_pid) {
 
     /* CHILD PROCESS */
+
+#ifdef __linux__
+    prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
 
     if (unlikely(fsrv->setenv)) { setenv("AFL_FORKSERVER_PARENT", "1", 0); }
 
@@ -2228,6 +2237,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
     if (python_pid < 0) { PFATAL("GUI mode fork failed."); }
     fsrv->gui_python_pid = python_pid;
     if (python_pid == 0) {  // child that will perform GUI interactions
+
+  #ifdef __linux__
+      prctl(PR_SET_PDEATHSIG, SIGKILL);
+  #endif
+
       ACTF("Non-forkserver exec'ing, with PID = %ld\n", (long)getpid());
       char gui_pid_str[16];
       sprintf(gui_pid_str, "%d",

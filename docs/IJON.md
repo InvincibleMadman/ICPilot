@@ -83,8 +83,10 @@ Reward inputs that increase the **common prefix length** of two strings.
 Example: `IJON_STRDIST(input, "bootloader")` helps AFL solve string comparisons inside hash maps.
 
 #### `IJON_DIST(x, y)`
-Reward fuzzing inputs that minimize the **absolute distance** between `x` and `y`.  
-Example: `IJON_DIST(checksum, expected)` guides the fuzzer toward valid checksums.
+Reward fuzzing inputs that share the most beginning bytes.
+(note that this changed to original IJON behaviour, it is not the absolute distance anymore.)
+Max length is defined in instrumentation/afl-compiler-rt.o.c and is set to 1024.
+Example: `IJON_DIST(buf, expected)` guides the fuzzer toward the expected byte values.
 
 #### `IJON_CMP(x, y)`
 Reward closeness of two integers by counting differing bits.  

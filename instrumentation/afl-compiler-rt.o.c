@@ -1012,7 +1012,7 @@ static void __afl_unmap_shm(void) {
 
 #ifdef USEMMAP
 
-    munmap((void *)__afl_cmp_map, __afl_map_size);
+    munmap((void *)__afl_cmp_map, sizeof(struct cmp_map));
 
 #else
 
@@ -1682,7 +1682,7 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
 void afl_read_pc_filter_file(const char *filter_file) {
 
   FILE *file;
-  char  ch;
+  int   ch;
 
   file = fopen(filter_file, "r");
   if (file == NULL) {
@@ -2789,6 +2789,7 @@ void __cmplog_rtn_hook_strn(u8 *ptr1, u8 *ptr2, u64 len) {
 
   // fprintf(stderr, "RTN1 %p %p %u\n", ptr1, ptr2, len);
   if (likely(!__afl_cmp_map)) return;
+  if (unlikely(!ptr1 || !ptr2)) return;
   if (unlikely(!len || len > __afl_cmplog_max_len)) return;
 
   int len0 = MIN(len, 32);
@@ -2805,8 +2806,7 @@ void __cmplog_rtn_hook_strn(u8 *ptr1, u8 *ptr2, u64 len) {
   else
     l = MAX(len1, len2);
 
-  l = area_is_valid(ptr1, l + 1);
-  l = area_is_valid(ptr2, l + 1);
+  l = MIN(area_is_valid(ptr1, l + 1), area_is_valid(ptr2, l + 1));
 
   if (l > 32) l = 32;
   if (l < 2) return;
@@ -2846,7 +2846,7 @@ void __cmplog_rtn_hook_strn(u8 *ptr1, u8 *ptr2, u64 len) {
 #ifdef __linux__
   u8 attr1 = get_prog_addr_attr(ptr1);
   u8 attr2 = get_prog_addr_attr(ptr2);
-  cmpfn->addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
+  cmpfn[hits].addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
 #endif
 
 }
@@ -2867,8 +2867,7 @@ void __cmplog_rtn_hook_str(u8 *ptr1, u8 *ptr2) {
     l = len1;
   else
     l = MAX(len1, len2);
-  l = area_is_valid(ptr1, l + 1);
-  l = area_is_valid(ptr2, l + 1);
+  l = MIN(area_is_valid(ptr1, l + 1), area_is_valid(ptr2, l + 1));
 
   if (l > 32) l = 32;
   if (l < 2) return;
@@ -2908,7 +2907,7 @@ void __cmplog_rtn_hook_str(u8 *ptr1, u8 *ptr2) {
 #ifdef __linux__
   u8 attr1 = get_prog_addr_attr(ptr1);
   u8 attr2 = get_prog_addr_attr(ptr2);
-  cmpfn->addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
+  cmpfn[hits].addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
 #endif
 
 }
@@ -2972,7 +2971,7 @@ void __cmplog_rtn_hook(u8 *ptr1, u8 *ptr2) {
 #ifdef __linux__
   u8 attr1 = get_prog_addr_attr(ptr1);
   u8 attr2 = get_prog_addr_attr(ptr2);
-  cmpfn->addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
+  cmpfn[hits].addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
 #endif
 
 }
@@ -3044,7 +3043,7 @@ void __cmplog_rtn_hook_n(u8 *ptr1, u8 *ptr2, u64 len) {
   #ifdef __linux__
   u8 attr1 = get_prog_addr_attr(ptr1);
   u8 attr2 = get_prog_addr_attr(ptr2);
-  cmpfn->addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
+  cmpfn[hits].addr_attr = ADDR_ATTR_COMBINE(attr1, attr2);
   #endif
 
 #endif
@@ -3586,6 +3585,56 @@ uint32_t ijon_hashstack(void) {
 
 /* String and memory distance functions */
 
+#define IJON_DIST_MAX_LEN 1024
+#define IJON_DIST_FUNC ijon_memprogress_prefix
+
+static inline uint32_t ijon_memprogress_prefix(const char *a, const char *b,
+                                               uint32_t len) {
+
+  const unsigned char *pa = (const unsigned char *)a;
+  const unsigned char *pb = (const unsigned char *)b;
+
+  uint32_t matches = 0;
+  while (matches < len && pa[matches] == pb[matches])
+    ++matches;
+
+  return matches;
+
+}
+
+/* maybe switch to this:
+
+static inline uint32_t ijon_memprogress_matches(const char *a, const char *b,
+                                                uint32_t len) {
+
+  const unsigned char *pa = (const unsigned char *)a;
+  const unsigned char *pb = (const unsigned char *)b;
+
+  uint32_t matches = 0;
+  for (uint32_t i = 0; i < len; ++i) {
+
+    matches += (uint32_t)(pa[i] == pb[i]);
+
+  }
+
+  return matches;
+
+}
+
+*/
+
+uint32_t ijon_memdist(char *a, char *b, size_t len) {
+
+  if (unlikely(!a && !b)) return 0;
+  if (unlikely(!a || !b))
+    return len > (size_t)UINT32_MAX ? UINT32_MAX : (uint32_t)len;
+  if (unlikely(len == 0)) return 0;
+
+  return IJON_DIST_FUNC(a, b,
+                        len >= IJON_DIST_MAX_LEN ? IJON_DIST_MAX_LEN : len);
+
+}
+
 uint32_t ijon_strdist(char *a, char *b) {
 
   if (!a && !b) return 0;
@@ -3595,81 +3644,9 @@ uint32_t ijon_strdist(char *a, char *b) {
   size_t len_a = strlen(a);
   size_t len_b = strlen(b);
 
-  return ijon_memdist(a, b, len_a > len_b ? len_a : len_b);
+  uint32_t len = (uint32_t)MIN(MAX(len_a, len_b), IJON_DIST_MAX_LEN);
 
-}
-
-uint32_t ijon_memdist(char *a, char *b, size_t len) {
-
-  if (!a && !b) return 0;
-  if (!a || !b) return (uint32_t)len;
-  if (len == 0) return 0;
-
-  // For efficiency with large strings, use a bounded Levenshtein distance
-  // Limit the maximum distance calculation to avoid performance issues
-  size_t max_dist = len > 1024 ? 1024 : len;
-
-  // Use Levenshtein distance algorithm (edit distance)
-  // For memory efficiency, use a rolling array approach for large strings
-  if (max_dist <= 256) {
-
-    // Small strings: use full matrix approach
-    uint32_t matrix[257][257];  // max_dist + 1
-
-    // Initialize first row and column
-    for (size_t i = 0; i <= max_dist; i++) {
-
-      matrix[i][0] = i;
-      matrix[0][i] = i;
-
-    }
-
-    // Fill the matrix
-    for (size_t i = 1; i <= max_dist && i <= strlen(a); i++) {
-
-      for (size_t j = 1; j <= max_dist && j <= strlen(b); j++) {
-
-        uint32_t cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
-
-        uint32_t deletion = matrix[i - 1][j] + 1;
-        uint32_t insertion = matrix[i][j - 1] + 1;
-        uint32_t substitution = matrix[i - 1][j - 1] + cost;
-
-        matrix[i][j] =
-            deletion < insertion
-                ? (deletion < substitution ? deletion : substitution)
-                : (insertion < substitution ? insertion : substitution);
-
-      }
-
-    }
-
-    size_t actual_len_a = strlen(a) > max_dist ? max_dist : strlen(a);
-    size_t actual_len_b = strlen(b) > max_dist ? max_dist : strlen(b);
-
-    return matrix[actual_len_a][actual_len_b];
-
-  } else {
-
-    // Large strings: use simplified byte-by-byte comparison with early
-    // termination
-    uint32_t differences = 0;
-    size_t   min_len = strlen(a) < strlen(b) ? strlen(a) : strlen(b);
-    size_t   max_len = strlen(a) > strlen(b) ? strlen(a) : strlen(b);
-
-    // Count character differences up to min_len
-    for (size_t i = 0; i < min_len && i < max_dist; i++) {
-
-      if (a[i] != b[i]) { differences++; }
-
-    }
-
-    // Add length difference
-    differences += (uint32_t)(max_len - min_len);
-
-    return differences > max_dist ? max_dist : differences;
-
-  }
+  return IJON_DIST_FUNC(a, b, len);
 
 }
 

@@ -245,7 +245,7 @@ ifeq "$(LLVM_LTO)" "1"
           ifeq "$(LLVMVER)" "$(TMP_LDLDD_VERSION)"
             $(warning ld.lld found in a weird location ($(AFL_REAL_LD)), but its the same version as LLVM so we will allow it)
           else
-            $(warning ld.lld found in a weird location ($(AFL_REAL_LD)) and its of a different version than LLMV ($(TMP_LDLDD_VERSION) vs. $(LLVMVER)) - cannot enable LTO mode)
+            $(warning ld.lld found in a weird location ($(AFL_REAL_LD)) and its of a different version than LLVM ($(TMP_LDLDD_VERSION) vs. $(LLVMVER)) - cannot enable LTO mode)
             AFL_REAL_LD=
             LLVM_LTO = 0
           endif
