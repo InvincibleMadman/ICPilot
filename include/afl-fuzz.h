@@ -304,6 +304,12 @@ struct queue_entry {
   double perf_score,                    /* performance score                */
       weight;
 
+  u32 lin_selects;                      /* LinUCB cache */
+  double lin_reward_ema,
+      lin_last_ucb,
+      lin_last_mean,
+      lin_last_reward;
+
   struct queue_entry *mother;            /* queue entry this based on        */
   u8                 *trace_mini;        /* Trace bytes, if kept             */
   u8                 *testcase_buf;      /* The testcase buffer, if loaded.  */
@@ -559,6 +565,27 @@ struct foreign_sync {
 
 };
 
+typedef struct {
+  u8 enabled;              // 是否由 -p linucb 打开
+  u8 in_warmup;            // 当前是否还在 warmup
+  u32 dim;
+  u32 candidate_k;
+  double alpha;
+
+  double *A_inv;           // d x d
+  double *b;               // d
+  double *theta;           // d
+
+  struct queue_entry *ep_seed;
+  double ep_x[LINUCB_DIM];
+
+  u32 before_queued_items;
+  u32 before_queued_with_cov;
+  u64 before_saved_crashes;
+  u64 before_saved_hangs;
+  u64 before_total_execs;
+} linucb_state_t;
+
 typedef struct afl_state {
 
   /* Position of this state in the global states list */
@@ -595,6 +622,9 @@ typedef struct afl_state {
 
   u64 tmp_core_time;
   s32 swarm_now;
+
+  u8 linucb_mode;
+  linucb_state_t linucb;
 
   double x_now[swarm_num][operator_num], L_best[swarm_num][operator_num],
       eff_best[swarm_num][operator_num], G_best[operator_num],
@@ -1391,6 +1421,12 @@ void   nuke_resume_dir(afl_state_t *);
 int    check_main_node_exists(afl_state_t *);
 u32    select_next_queue_entry(afl_state_t *afl);
 void   create_alias_table(afl_state_t *afl);
+void   linucb_init(afl_state_t *afl);
+void   linucb_deinit(afl_state_t *afl);
+u8     linucb_warmup_active(afl_state_t *afl);
+u32    linucb_select_next_queue_entry(afl_state_t *afl);
+void   linucb_begin_episode(afl_state_t *afl, struct queue_entry *q);
+void   linucb_finish_episode(afl_state_t *afl, struct queue_entry *q, u8 skipped);
 void   setup_dirs_fds(afl_state_t *);
 void   setup_cmdline_file(afl_state_t *, char **);
 void   setup_stdio_file(afl_state_t *);

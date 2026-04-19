@@ -221,8 +221,8 @@ static void usage(u8 *argv0, int more_help) {
       "                  exploit mode, and back on new coverage (default: %u)\n"
       "  -p schedule   - power schedules compute a seed's performance score:\n"
       "                  explore(default), fast, exploit, seek, rare, mmopt, "
-      "coe, lin\n"
-      "                  quad -- see docs/FAQ.md for more information\n"
+      "coe, lin,\n"
+      "                  quad, linucb -- see docs/FAQ.md for more information\n"
       "  -f file       - location read by the fuzzed program (default: stdin "
       "or @@)\n"
       "  -t msec       - timeout for each run (auto-scaled, default %u ms). "
@@ -917,6 +917,11 @@ int main(int argc, char **argv_orig, char **envp) {
         } else if (!stricmp(optarg, "seek")) {
 
           afl->schedule = SEEK;
+
+        } else if (!stricmp(optarg, "linucb")) {
+          
+          afl->linucb_mode = 1;
+          afl->schedule = EXPLORE;   // 保留 explore 作为基础 alias/perf_score 语义
 
         } else {
 
@@ -1717,6 +1722,7 @@ int main(int argc, char **argv_orig, char **envp) {
   check_asan_opts(afl);
 
   afl->power_name = power_names[afl->schedule];
+  if (afl->linucb_mode) afl->power_name = (u8 *)"linucb";
 
   if (!afl->non_instrumented_mode && !afl->sync_id) {
 
@@ -1830,6 +1836,9 @@ int main(int argc, char **argv_orig, char **envp) {
 
   ACTF("Getting to work...");
 
+  if (afl->linucb_mode) {
+    OKF("Using LinUCB queue prioritization on top of EXPLORE base scheduling");
+  }
   switch (afl->schedule) {
 
     case FAST:
@@ -1863,6 +1872,11 @@ int main(int argc, char **argv_orig, char **envp) {
       FATAL("Unknown power schedule");
       break;
 
+  }
+
+  if (afl->linucb_mode && afl->old_seed_selection) {
+    WARNF("LinUCB queue prioritization is disabled under -Z/-M old seed selection.");
+    afl->linucb_mode = 0;
   }
 
   if (afl->shm.cmplog_mode) { OKF("CmpLog level: %u", afl->cmplog_lvl); }
@@ -3633,19 +3647,25 @@ int main(int argc, char **argv_orig, char **envp) {
 
           }
 
-          do {
+          if (afl->linucb_mode && !linucb_warmup_active(afl)) {
+            afl->current_entry = linucb_select_next_queue_entry(afl);
+          } else {
+            do {
 
             afl->current_entry = select_next_queue_entry(afl);
 
-          } while (unlikely(afl->current_entry >= afl->queued_items));
-
+            } while (unlikely(afl->current_entry >= afl->queued_items));
+          }
           afl->queue_cur = afl->queue_buf[afl->current_entry];
 
         }
 
       }
 
+      if (afl->linucb_mode) linucb_begin_episode(afl, afl->queue_cur);
       skipped_fuzz = fuzz_one(afl);
+      if (afl->linucb_mode) linucb_finish_episode(afl, afl->queue_cur, skipped_fuzz);
+      
   #ifdef INTROSPECTION
       ++afl->queue_cur->stats_selected;
 
