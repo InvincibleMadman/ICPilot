@@ -322,6 +322,8 @@ void afl_fsrv_init(afl_forkserver_t *fsrv) {
   /* IJON space allocation is handled by normal resize logic based on target's
    * reported size */
   fsrv->real_map_size = fsrv->map_size;
+  fsrv->risk_map = NULL;
+  fsrv->risk_map_words = RISK_SHM_WORDS;
   fsrv->use_fauxsrv = false;
   fsrv->last_run_timed_out = false;
   fsrv->debug = false;
@@ -352,6 +354,8 @@ void afl_fsrv_init_dup(afl_forkserver_t *fsrv_to, afl_forkserver_t *from) {
   fsrv_to->mem_limit = from->mem_limit;
   fsrv_to->map_size = from->map_size;
   fsrv_to->real_map_size = from->real_map_size;
+  fsrv_to->risk_map = from->risk_map;
+  fsrv_to->risk_map_words = from->risk_map_words;
   fsrv_to->support_shmem_fuzz = from->support_shmem_fuzz;
   fsrv_to->out_file = from->out_file;
   fsrv_to->dev_urandom_fd = from->dev_urandom_fd;

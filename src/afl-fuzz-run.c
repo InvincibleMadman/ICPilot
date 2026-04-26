@@ -45,6 +45,27 @@ u64 time_spent_working = 0;
 /* Execute target application, monitoring for timeouts. Return status
    information. The called program will update afl->fsrv->trace_bits. */
 
+static inline void risk_collect_from_side_channel(afl_state_t *afl,
+                                                  afl_forkserver_t *fsrv) {
+
+  memset(afl->cur_risk_hot, 0, sizeof(afl->cur_risk_hot));
+  afl->cur_risk_total_hits = 0;
+  afl->cur_risk_max_level = 0;
+
+  if (unlikely(!afl->risk_enabled || !fsrv->risk_map)) { return; }
+
+  for (u32 i = 0; i < RISK_HOT_ARRAY_SIZE; ++i) {
+
+    u32 v = fsrv->risk_map[i];
+    afl->cur_risk_hot[i] = v;
+    afl->cur_risk_total_hits += v;
+
+    if (v) { afl->cur_risk_max_level = (u8)(i + 1); }
+
+  }
+
+}
+
 fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
                                                        afl_forkserver_t *fsrv,
                                                        u32 timeout) {
@@ -63,12 +84,10 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
 
 #endif
 
-  fsrv_run_result_t res = afl_fsrv_run_target(fsrv, timeout, &afl->stop_soon);
-
-  if (likely(afl->risk_enabled && fsrv->risk_map)) {
-    /* TODO: aggregate risk side-channel into afl->cur_risk_* */
-    /* reset cur_risk_* first, then scan fsrv->risk_map */
+  if (RISK_RESET_EACH_RUN && likely(afl->risk_enabled && fsrv->risk_map)) {
+    memset(fsrv->risk_map, 0, sizeof(u32) * fsrv->risk_map_words);
   }
+  fsrv_run_result_t res = afl_fsrv_run_target(fsrv, timeout, &afl->stop_soon);
 
 #ifdef __AFL_CODE_COVERAGE
   if (unlikely(!fsrv->persistent_trace_bits)) {
@@ -108,8 +127,7 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
 
   }
 
-  /* risk aggregation can also be placed here if you want all post-exec
-     feedback handling grouped together */
+  risk_collect_from_side_channel(afl, fsrv);
 
   /* Check for new IJON max values after execution */
   if (unlikely(fsrv->use_ijon && afl->ijon_state && afl->ijon_bits)) {
@@ -518,6 +536,27 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     }
 
+    if (afl->risk_enabled && !afl->risk_map) {
+
+      afl->risk_shm.risk_mode = 1;
+      afl->risk_shm.cmplog_mode = 0;
+      afl->risk_shm.sanfuzz_mode = 0;
+      afl->risk_shm.shmemfuzz_mode = 0;
+
+      afl->risk_map = (u32 *)afl_shm_init(
+          &afl->risk_shm,
+          sizeof(u32) * RISK_SHM_WORDS,
+          afl->non_instrumented_mode,
+          afl->fsrv.perm,
+          afl->fsrv.gid_set ? afl->fsrv.gid : -1);
+
+      afl->fsrv.risk_map = afl->risk_map;
+      afl->fsrv.risk_map_words = RISK_SHM_WORDS;
+
+      memset(afl->risk_map, 0, sizeof(u32) * RISK_SHM_WORDS);
+
+    }
+
     afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                    afl->afl_env.afl_debug_child);
 
@@ -592,12 +631,14 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     fault = fuzz_run_target(afl, &afl->fsrv, use_tmout);
 
-    if (first_run && likely(afl->risk_enabled)) {
+    if (likely(afl->risk_enabled)) {
+
       q->risk_total_hits = afl->cur_risk_total_hits;
       memcpy(q->risk_hot, afl->cur_risk_hot, sizeof(q->risk_hot));
       q->risk_max_level = afl->cur_risk_max_level;
-      q->risk_seen = (q->risk_total_hits != 0);
-      /* q->risk_score can be derived here or lazily in queue logic */
+      q->risk_seen = (u8)(q->risk_total_hits != 0);
+      q->risk_target_hits = 0;
+
     }
 
     // update the time spend in calibration after each execution, as those may

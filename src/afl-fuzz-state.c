@@ -1005,7 +1005,7 @@ void afl_state_deinit(afl_state_t *afl) {
   ck_free(afl->havoc_prof);
 
   ck_free(afl->afl_env.afl_forksrv_supl_gids);
-  afl_shm_deinit(&afl->risk_shm);
+  if (afl->risk_map) { afl_shm_deinit(&afl->risk_shm); }
 
   list_remove(&afl_states, afl);
 

@@ -368,12 +368,6 @@ static inline void __afl_risk_reset(void) {
 #endif
 }
 
-void __afl_risk_ins(unsigned int token) {
-  if (!__afl_risk_map) return;
-  /* TODO: decode backend token -> level index / optional target slot */
-  /* MVP: only update hot buckets */
-}
-
 /* Error reporting to forkserver controller */
 
 static void send_forkserver_error(int error) {
@@ -382,6 +376,87 @@ static void send_forkserver_error(int error) {
   if (!error || error > 0xffff) return;
   status = (FS_NEW_ERROR | error);
   if (write(FORKSRV_FD + 1, (char *)&status, 4) != 4) { return; }
+
+}
+
+static void __afl_map_risk_shm(void) {
+
+  char *id_str = getenv(RISK_SHM_ENV_VAR);
+
+  if (!id_str) {
+    __afl_risk_map = NULL;
+    return;
+  }
+
+#ifdef USEMMAP
+
+  const char *shm_file_path = id_str;
+  int shm_fd = shm_open(shm_file_path, O_RDWR, DEFAULT_PERMISSION);
+
+  if (shm_fd == -1) {
+    perror("risk shm_open() failed");
+    send_forkserver_error(FS_ERROR_SHM_OPEN);
+    exit(1);
+  }
+
+  __afl_risk_map = (u32 *)mmap(
+      0, sizeof(u32) * RISK_SHM_WORDS, PROT_READ | PROT_WRITE,
+      MAP_SHARED, shm_fd, 0);
+
+  close(shm_fd);
+
+#else
+
+  u32 shm_id = atoi(id_str);
+  __afl_risk_map = (u32 *)shmat(shm_id, NULL, 0);
+
+#endif
+
+  if (!__afl_risk_map || __afl_risk_map == (void *)-1) {
+    perror("Could not access risk shared memory");
+    send_forkserver_error(FS_ERROR_SHM_OPEN);
+    exit(1);
+  }
+
+}
+
+static FORCEINLINE u32 __afl_risk_token_to_slot(unsigned int token) {
+
+  if (token >= (1U << 16)) { token -= (1U << 16); }
+
+  switch (token) {
+
+    case 0:
+    case 32:
+      return 0;
+
+    case 1:
+    case 33:
+      return 1;
+
+    case 2:
+    case 34:
+      return 2;
+
+    default:
+      return 0xffffffffU;
+
+  }
+
+}
+
+void __afl_risk_ins(unsigned int token) {
+
+  if (!USE_RISK_FEEDBACK || !__afl_risk_map) { return; }
+
+  u32 slot = __afl_risk_token_to_slot(token);
+  if (slot >= RISK_HOT_ARRAY_SIZE) { return; }
+
+#if 1
+  __afl_risk_map[slot] += 1 + ((u32)(1 + __afl_risk_map[slot]) == 0);
+#else
+  ++__afl_risk_map[slot];
+#endif
 
 }
 
@@ -755,8 +830,7 @@ static void __afl_map_shm(void) {
 
 #endif
 
-    /* map independent risk side-channel shm if configured */
-    /* TODO: read AFL_RISK_SHM_ID and attach to __afl_risk_map */
+    __afl_map_risk_shm();
     
     /* DEFERRED IJON SETUP: Initialize on first use when actual map size is
      * known */

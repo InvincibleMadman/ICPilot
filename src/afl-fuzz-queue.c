@@ -43,6 +43,50 @@ void run_afl_custom_queue_new_entry(afl_state_t *afl, struct queue_entry *q,
 
 #endif
 
+static inline double risk_refresh_score(struct queue_entry *q) {
+
+  u64 total_hits = 0;
+  u64 weighted_hits = 0;
+
+  q->risk_max_level = 0;
+
+  for (u32 i = 0; i < RISK_HOT_ARRAY_SIZE; ++i) {
+
+    u32 weight = (i == 0) ? RISK_LEVEL1_WEIGHT
+                 : (i == 1) ? RISK_LEVEL2_WEIGHT
+                            : RISK_LEVEL3_WEIGHT;
+
+    total_hits += q->risk_hot[i];
+    weighted_hits += (u64)q->risk_hot[i] * (u64)weight;
+
+    if (q->risk_hot[i]) { q->risk_max_level = (u8)(i + 1); }
+
+  }
+
+  q->risk_total_hits = (u32)total_hits;
+  q->risk_seen = (u8)(total_hits != 0);
+
+  if (!total_hits) {
+    q->risk_score = 0.0;
+    return 0.0;
+  }
+
+  double score =
+      (double)weighted_hits / (double)(total_hits * (u64)RISK_LEVEL3_WEIGHT);
+
+  if (q->risk_max_level >= 3) {
+    score += 0.05;
+  } else if (q->risk_max_level == 2) {
+    score += 0.025;
+  }
+
+  if (score > 1.0) { score = 1.0; }
+
+  q->risk_score = score;
+  return score;
+
+}
+
 /* select next queue entry based on alias algo - fast! */
 
 inline u32 select_next_queue_entry(afl_state_t *afl) {
@@ -284,17 +328,21 @@ void create_alias_table(afl_state_t *afl) {
         }
 
         q->weight = weight;
-
+        double risk_score = risk_refresh_score(q);
         if (RISK_ENABLE_SCHED_BONUS && q->risk_seen) {
-          double risk_bonus = q->risk_score;
+          double alias_bonus =
+              ((double)RISK_ALIAS_WEIGHT_BONUS_PCT / 100.0) * risk_score;
 
-          if (risk_bonus > ((double)RISK_ALIAS_WEIGHT_BONUS_PCT / 100.0)) {
-            risk_bonus = (double)RISK_ALIAS_WEIGHT_BONUS_PCT / 100.0;
-          }
-          q->weight *= (1.0 + risk_bonus);
+          q->weight *= (1.0 + alias_bonus);
         }
 
         q->perf_score = calculate_score(afl, q);
+        if (RISK_ENABLE_SCHED_BONUS && q->risk_seen) {
+          double perf_bonus =
+              ((double)RISK_PERF_SCORE_BONUS_PCT / 100.0) * risk_score;
+
+          q->perf_score *= (1.0 + perf_bonus);
+        }
         sum += q->weight;
 
       }
@@ -344,6 +392,13 @@ void create_alias_table(afl_state_t *afl) {
       if (likely(!q->disabled)) {
 
         q->perf_score = calculate_score(afl, q);
+        double risk_score = risk_refresh_score(q);
+        if (RISK_ENABLE_SCHED_BONUS && q->risk_seen) {
+          double perf_bonus =
+              ((double)RISK_PERF_SCORE_BONUS_PCT / 100.0) * risk_score;
+
+          q->perf_score *= (1.0 + perf_bonus);
+        }
         sum += q->perf_score;
 
       }
@@ -989,9 +1044,14 @@ void update_bitmap_score(afl_state_t *afl, struct queue_entry *q,
 
           if (likely(fav_factor > top_rated_fav_factor)) { continue; }
 
-          if (RISK_TOP_RATED_TIEBREAK) {
-            /* TODO: only when main metrics are equal / near-equal:
-              compare q->risk_score or q->risk_max_level here */
+          if (RISK_TOP_RATED_TIEBREAK &&
+            fuzz_p2 == top_rated_fuzz_p2 &&
+            fav_factor == top_rated_fav_factor) {
+
+              double new_risk = risk_refresh_score(q);
+              double old_risk = risk_refresh_score(afl->top_rated[i]);
+              if (likely(old_risk > new_risk)) { continue; }
+
           }
           
           /* Looks like we're going to win. Decrease ref count for the
@@ -1277,6 +1337,16 @@ void update_bitmap_rescore(afl_state_t *afl, struct queue_entry *q, u32 index) {
     if (likely(fuzz_p2 > top_rated_fuzz_p2)) { return; }
 
     if (likely(fav_factor > top_rated_fav_factor)) { return; }
+
+    if (RISK_TOP_RATED_TIEBREAK &&
+        fuzz_p2 == top_rated_fuzz_p2 &&
+        fav_factor == top_rated_fav_factor) {
+
+      double new_risk = risk_refresh_score(q);
+      double old_risk = risk_refresh_score(afl->top_rated[i]);
+      if (likely(old_risk > new_risk)) { return; }
+
+    }
 
     /* Looks like we're going to win. Decrease ref count for the
         previous winner, discard its afl->fsrv.trace_bits[] if necessary. */
