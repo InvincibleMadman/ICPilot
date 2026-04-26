@@ -413,6 +413,12 @@ u8 *find_object(aflcc_state_t *aflcc, u8 *obj) {
 
   u8 *afl_path = getenv("AFL_PATH");
   u8 *slash = NULL, *tmp;
+  u8 is_header = 0;
+
+  if (strlen(obj) > 2 && obj[strlen(obj) - 1] == 'h' &&
+      obj[strlen(obj) - 2] == '.') {
+    is_header = 1;
+  }
 
   if (afl_path) {
 
@@ -447,22 +453,51 @@ u8 *find_object(aflcc_state_t *aflcc, u8 *obj) {
         return tmp;
 
       }
-
       ck_free(tmp);
-      tmp = alloc_printf("%s/../lib/afl/%s", dir, obj);
+      
+      if (is_header) {
 
-      if (aflcc->debug) DEBUGF("Trying %s\n", tmp);
+        tmp = alloc_printf("%s/include/%s", dir, obj);
 
-      if (!access(tmp, R_OK)) {
+        if (aflcc->debug) DEBUGF("Trying %s\n", tmp);
 
-        ck_free(dir);
-        return tmp;
+        if (!access(tmp, R_OK)) {
+
+          ck_free(dir);
+          return tmp;
+        }
+
+        ck_free(tmp);
+
+        tmp = alloc_printf("%s/../include/afl/%s", dir, obj);
+
+        if (aflcc->debug) DEBUGF("Trying %s\n", tmp);
+
+        if (!access(tmp, R_OK)) {
+
+          ck_free(dir);
+          return tmp;
+        }
+
+        ck_free(tmp);
+
+      } else {
+
+        tmp = alloc_printf("%s/../lib/afl/%s", dir, obj);
+
+        if (aflcc->debug) DEBUGF("Trying %s\n", tmp);
+
+        if (!access(tmp, R_OK)) {
+
+          ck_free(dir);
+          return tmp;
+        }
+
+        ck_free(tmp);
 
       }
 
-      ck_free(tmp);
       ck_free(dir);
-
     }
 
 #if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__linux__) || \
@@ -531,13 +566,12 @@ u8 *find_object(aflcc_state_t *aflcc, u8 *obj) {
   if (strlen(obj) > 2 && obj[strlen(obj) - 1] == 'h' &&
       obj[strlen(obj) - 2] == '.') {
 
-    tmp = alloc_printf("%s/include/%s", afl_path, obj);
-
-    if (aflcc->debug) DEBUGF("Trying %s\n", tmp);
-
-    if (!access(tmp, R_OK)) { return tmp; }
-
-    ck_free(tmp);
+    if (afl_path) {
+      tmp = alloc_printf("%s/include/%s", afl_path, obj);
+      if (aflcc->debug) DEBUGF("Trying %s\n", tmp);
+      if (!access(tmp, R_OK)) { return tmp; }
+      ck_free(tmp);
+    }
 
     tmp = alloc_printf("%s/include/%s", AFL_PATH, obj);
 
