@@ -2694,7 +2694,12 @@ void __sanitizer_cov_trace_switch(uint64_t val, uint64_t *cases) {
 
 }
 
+#ifdef __APPLE__
+__attribute__((weak_import)) void *__asan_region_is_poisoned(void  *beg,
+                                                             size_t size);
+#else
 __attribute__((weak)) void *__asan_region_is_poisoned(void *beg, size_t size);
+#endif
 
 // POSIX shenanigan to see if an area is mapped.
 // If it is mapped as X-only, we have a problem, so maybe we should add a check
