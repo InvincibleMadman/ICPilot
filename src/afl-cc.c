@@ -2588,6 +2588,12 @@ void add_runtime(aflcc_state_t *aflcc) {
 
     }
 
+    /* afl-compiler-rt.o weakly references __asan_region_is_poisoned; on
+       Mach-O the linker still requires resolution unless explicitly told
+       the symbol may be missing at runtime. */
+    insert_param(aflcc, "-Wl,-U");
+    insert_param(aflcc, "-Wl,___asan_region_is_poisoned");
+
   #endif
 
   }

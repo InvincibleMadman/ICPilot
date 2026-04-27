@@ -121,6 +121,9 @@ else ifeq "$(shell uname)" "Darwin"
  OS:=macos
  AFL_CFLAGS:=$(AFL_CFLAGS) -Wno-deprecated-declarations
  GUM_ARCH:=""
+ # afl-compiler-rt.o weakly references __asan_region_is_poisoned; tell ld
+ # it may be missing at runtime (Mach-O won't accept a plain weak undef).
+ LDFLAGS+=-Wl,-U,___asan_region_is_poisoned
  ifeq "$(ARCH)" "arm64"
   TARGET_CC= \
   	"clang" \

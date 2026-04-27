@@ -2694,7 +2694,12 @@ void __sanitizer_cov_trace_switch(uint64_t val, uint64_t *cases) {
 
 }
 
+#ifdef __APPLE__
+__attribute__((weak_import)) void *__asan_region_is_poisoned(void  *beg,
+                                                             size_t size);
+#else
 __attribute__((weak)) void *__asan_region_is_poisoned(void *beg, size_t size);
+#endif
 
 // POSIX shenanigan to see if an area is mapped.
 // If it is mapped as X-only, we have a problem, so maybe we should add a check
@@ -2783,8 +2788,13 @@ static u8 get_prog_addr_attr(const void *addr) {
 
 #endif
 
-/* hook for string with length functions, eg. strncmp, strncasecmp etc.
-   Note that we ignore the len parameter and take longer strings if present. */
+static inline u32 cmplog_string_len_with_nul(u32 len, u32 cap) {
+
+  return len < cap ? len + 1U : cap;
+
+}
+
+/* hook for string with length functions, eg. strncmp, strncasecmp etc. */
 void __cmplog_rtn_hook_strn(u8 *ptr1, u8 *ptr2, u64 len) {
 
   // fprintf(stderr, "RTN1 %p %p %u\n", ptr1, ptr2, len);
@@ -2792,23 +2802,19 @@ void __cmplog_rtn_hook_strn(u8 *ptr1, u8 *ptr2, u64 len) {
   if (unlikely(!ptr1 || !ptr2)) return;
   if (unlikely(!len || len > __afl_cmplog_max_len)) return;
 
-  int len0 = MIN(len, 32);
+  u32 cap = (u32)MIN(len, 32ULL);
+  int l1 = area_is_valid(ptr1, cap);
+  int l2 = area_is_valid(ptr2, cap);
+  if (l1 <= 0 || l2 <= 0) return;
 
-  int len1 = strnlen(ptr1, len0);
+  cap = (u32)MIN(l1, l2);
 
-  int len2 = strnlen(ptr2, len0);
+  u32 len1 = (u32)strnlen((char *)ptr1, cap);
+  u32 len2 = (u32)strnlen((char *)ptr2, cap);
 
-  int l;
-  if (!len1)
-    l = len2;
-  else if (!len2)
-    l = len1;
-  else
-    l = MAX(len1, len2);
+  u32 l = MAX(cmplog_string_len_with_nul(len1, cap),
+              cmplog_string_len_with_nul(len2, cap));
 
-  l = MIN(area_is_valid(ptr1, l + 1), area_is_valid(ptr2, l + 1));
-
-  if (l > 32) l = 32;
   if (l < 2) return;
 
   uintptr_t k = (uintptr_t)__builtin_return_address(0);
@@ -2857,19 +2863,16 @@ void __cmplog_rtn_hook_str(u8 *ptr1, u8 *ptr2) {
   // fprintf(stderr, "RTN1 %p %p\n", ptr1, ptr2);
   if (likely(!__afl_cmp_map)) return;
   if (unlikely(!ptr1 || !ptr2)) return;
-  int len1 = strnlen(ptr1, 31) + 1;
-  int len2 = strnlen(ptr2, 31) + 1;
 
-  int l;
-  if (!len1)
-    l = len2;
-  else if (!len2)
-    l = len1;
-  else
-    l = MAX(len1, len2);
-  l = MIN(area_is_valid(ptr1, l + 1), area_is_valid(ptr2, l + 1));
+  int l1 = area_is_valid(ptr1, 32);
+  int l2 = area_is_valid(ptr2, 32);
+  if (l1 <= 0 || l2 <= 0) return;
 
-  if (l > 32) l = 32;
+  u32 cap = (u32)MIN(l1, l2);
+  u32 len1 = cmplog_string_len_with_nul((u32)strnlen((char *)ptr1, cap), cap);
+  u32 len2 = cmplog_string_len_with_nul((u32)strnlen((char *)ptr2, cap), cap);
+  u32 l = MAX(len1, len2);
+
   if (l < 2) return;
 
   uintptr_t k = (uintptr_t)__builtin_return_address(0);

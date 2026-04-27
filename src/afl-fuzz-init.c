@@ -3483,3 +3483,4 @@ void save_cmdline(afl_state_t *afl, u32 argc, char **argv) {
   *buf = 0;
 
 }
+
