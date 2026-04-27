@@ -428,25 +428,37 @@ static void __afl_map_risk_shm(void) {
 
 static FORCEINLINE u32 __afl_risk_token_to_slot(unsigned int token) {
 
+  /* Backend token semantics:
+     34 = low risk / low confidence
+     33 = medium
+     32 = high risk / high confidence
+
+     Internal slots remain:
+     slot 0 -> level1 -> low
+     slot 1 -> level2 -> medium
+     slot 2 -> level3 -> high
+  */
   if (token >= (1U << 16)) { token -= (1U << 16); }
 
   switch (token) {
 
-    case 0:
-    case 32:
-      return 0;
+  /* legacy local encoding */
+  case 0:
+    return 0;
+  case 1:
+    return 1;
+  case 2:
+    return 2;
 
-    case 1:
-    case 33:
-      return 1;
-
-    case 2:
-    case 34:
-      return 2;
-
-    default:
-      return 0xffffffffU;
-
+  /* backend encoding */
+  case 34:
+    return 0;
+  case 33:
+    return 1;
+  case 32:
+    return 2;
+  default:
+    return 0xffffffffU;
   }
 
 }
