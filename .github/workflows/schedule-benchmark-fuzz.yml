@@ -34,7 +34,7 @@ permissions:
 
 concurrency:
   group: schedule-benchmark-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   fuzz-schedule:
