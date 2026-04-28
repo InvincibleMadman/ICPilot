@@ -1,0 +1,238 @@
+name: Schedule benchmark fuzz
+
+run-name: schedule benchmark ${{ github.event.inputs.test_schedule || 'linucb' }} vs ${{ github.event.inputs.base_schedule || 'explore' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      fuzz_seconds:
+        description: "Seconds for each fuzz campaign"
+        required: true
+        default: "1800"
+      base_schedule:
+        description: "Baseline AFL++ power schedule, e.g. explore / fast / rare"
+        required: true
+        default: "explore"
+      test_schedule:
+        description: "Candidate schedule under test, e.g. linucb"
+        required: true
+        default: "linucb"
+      protocols:
+        description: "Which protocol targets to fuzz"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - iec61850
+          - modbus
+
+  # 让 schedule-dev 分支提交后也能触发。
+  # 如果你只想手动运行，可以删除整个 push 块。
+  push:
+    branches:
+      - schedule-dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schedule-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz-schedule:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    env:
+      FUZZ_SECONDS: ${{ github.event.inputs.fuzz_seconds || '1800' }}
+      BASE_SCHEDULE: ${{ github.event.inputs.base_schedule || 'explore' }}
+      TEST_SCHEDULE: ${{ github.event.inputs.test_schedule || 'linucb' }}
+      RUN_PROTOCOLS: ${{ github.event.inputs.protocols || 'both' }}
+
+      AFL_SKIP_CPUFREQ: "1"
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+      AFL_NO_UI: "1"
+      AFL_NO_AFFINITY: "1"
+      AFL_QUIET: "1"
+
+      PREENY_SOCKET_SO: "desock.so"
+      AFL_PATH: ${{ github.workspace }}
+
+      # 复用 prepare-riskins-build.sh 依赖的工作目录变量，
+      # 但放到独立 schedule-ci 下，避免和原 riskins workflow 混用。
+      RISKINS_WORKBASE: ${{ runner.temp }}/schedule-ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Show runner toolchain
+        shell: bash
+        run: |
+          set -eux
+          uname -a
+          gcc --version
+          g++ --version
+          clang-18 --version || true
+          clang --version || true
+          llvm-config-18 --version || true
+          cmake --version || true
+          python3 --version
+          nproc || true
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          GCC_MAJOR="$(gcc -dumpversion | cut -d. -f1)"
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            git \
+            python3 \
+            python3-dev \
+            python3-setuptools \
+            cmake \
+            automake \
+            autoconf \
+            libtool \
+            flex \
+            bison \
+            cargo \
+            libglib2.0-dev \
+            libpixman-1-dev \
+            libgtk-3-dev \
+            lld-18 \
+            llvm-18 \
+            llvm-18-dev \
+            clang-18 \
+            gcc-${GCC_MAJOR}-plugin-dev \
+            libstdc++-${GCC_MAJOR}-dev
+
+      - name: Build Preeny desock.so
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/preeny
+          git clone --depth 1 https://github.com/zardus/preeny.git /tmp/preeny
+          make -C /tmp/preeny/src desock.so
+          mkdir -p "${{ github.workspace }}/.deps/preeny"
+          cp /tmp/preeny/src/desock.so "${{ github.workspace }}/.deps/preeny/desock.so"
+          test -f "${{ github.workspace }}/.deps/preeny/desock.so"
+          echo "PREENY_DIR=${{ github.workspace }}/.deps/preeny" >> "$GITHUB_ENV"
+          ls -lah "${{ github.workspace }}/.deps/preeny/desock.so"
+
+      - name: Validate and prepare helper scripts
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          REQUIRED_SCRIPTS=(
+            ".github/scripts/prepare-riskins-build.sh"
+            ".github/scripts/run-schedule-benchmark-fuzz.sh"
+            ".github/scripts/summarize-schedule-benchmark.py"
+          )
+
+          echo "[*] Checking helper scripts exist..."
+          for script in "${REQUIRED_SCRIPTS[@]}"; do
+            if [ ! -f "$script" ]; then
+              echo "[!] Missing required script: $script" >&2
+              exit 1
+            fi
+          done
+
+          echo "[*] Checking CRLF line endings..."
+          for script in "${REQUIRED_SCRIPTS[@]}"; do
+            if grep -q $'\r' "$script"; then
+              echo "[!] CRLF line endings detected in: $script" >&2
+              echo "    Please convert it to LF, for example: dos2unix $script" >&2
+              exit 1
+            fi
+          done
+
+          echo "[*] Granting execute permissions..."
+          chmod +x "${REQUIRED_SCRIPTS[@]}"
+
+          echo "[*] Verifying execute permissions..."
+          for script in "${REQUIRED_SCRIPTS[@]}"; do
+            if [ ! -x "$script" ]; then
+              echo "[!] Script is not executable after chmod: $script" >&2
+              exit 1
+            fi
+          done
+
+          echo "[*] Running shell syntax checks..."
+          bash -n .github/scripts/prepare-riskins-build.sh
+          bash -n .github/scripts/run-schedule-benchmark-fuzz.sh
+
+          echo "[*] Running Python syntax check..."
+          python3 -m py_compile .github/scripts/summarize-schedule-benchmark.py
+
+          echo "[+] Helper scripts are ready."
+
+      - name: Prepare runner for AFL crash detection
+        shell: bash
+        run: |
+          set -eux
+          echo "Before: $(cat /proc/sys/kernel/core_pattern)"
+          sudo sysctl -w kernel.core_pattern=core
+          echo "After: $(cat /proc/sys/kernel/core_pattern)"
+
+      - name: Relax runner AFL settings
+        shell: bash
+        run: |
+          set -eux
+          sudo -E ./afl-system-config || true
+
+      - name: Build AFL++ and protocol targets
+        shell: bash
+        env:
+          CC: clang-18
+          CXX: clang++-18
+          LLVM_CONFIG: llvm-config-18
+          AFL_PATH: ${{ github.workspace }}
+        run: |
+          set -euxo pipefail
+          ./.github/scripts/prepare-riskins-build.sh
+
+      - name: Show afl-fuzz schedule help
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "AFL_ROOT=${AFL_ROOT:-}"
+          test -x "${AFL_ROOT}/afl-fuzz"
+          "${AFL_ROOT}/afl-fuzz" -h 2>&1 | grep -Ei -- "-p|schedule|linucb|power" || true
+
+      - name: Run schedule benchmark fuzz campaigns
+        shell: bash
+        env:
+          AFL_PATH: ${{ github.workspace }}
+        run: |
+          set -euxo pipefail
+          ./.github/scripts/run-schedule-benchmark-fuzz.sh
+
+      - name: Compare schedule benchmark results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT_ROOT="${RISKINS_WORKBASE}/schedule-fuzz-out"
+          if [ ! -d "$OUT_ROOT" ]; then
+            echo "schedule fuzz output directory not found: $OUT_ROOT"
+            exit 1
+          fi
+          ./.github/scripts/summarize-schedule-benchmark.py "$OUT_ROOT"
+
+      - name: Upload schedule benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schedule-benchmark-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/schedule-ci/schedule-fuzz-out/**
